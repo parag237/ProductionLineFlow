@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"productionlineflow-api/internal/config"
+	"productionlineflow-api/internal/constants"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,6 +29,23 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	v1.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+	platform := v1.Group("/platform")
+	if deps == nil || deps.PlatformAuth == nil {
+		platform.POST("/auth/login", authUnavailable)
+		platform.POST("/auth/refresh", authUnavailable)
+		platform.POST("/auth/logout", authUnavailable)
+	} else {
+		platformHandler := NewPlatformHandler(deps.PlatformAuth, deps.Company, deps.SecureCookie)
+		platform.POST("/auth/login", platformHandler.Login)
+		platform.POST("/auth/refresh", platformHandler.Refresh)
+		platform.POST("/auth/logout", platformHandler.Logout)
+		platformSecured := platform.Group("")
+		if deps.JWT != nil && deps.PlatformRepository != nil {
+			platformSecured.Use(RequirePlatformAuth(deps.JWT, deps.PlatformRepository))
+		}
+		platformSecured.GET("/me", platformHandler.Me)
+		platformSecured.POST("/companies", RequirePlatformPermission(constants.PermissionCompaniesCreate), platformHandler.CreateCompany)
+	}
 	if deps == nil || deps.Auth == nil {
 		v1.POST("/auth/login", authUnavailable)
 		v1.POST("/auth/refresh", authUnavailable)

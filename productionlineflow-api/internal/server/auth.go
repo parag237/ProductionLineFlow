@@ -8,15 +8,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/auth"
+	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
 )
 
 type Dependencies struct {
-	Auth         *auth.Service
-	JWT          *auth.JWTService
-	Repository   auth.Repository
-	SecureCookie bool
+	Auth               *auth.Service
+	PlatformAuth       *auth.PlatformService
+	JWT                *auth.JWTService
+	Repository         auth.Repository
+	PlatformRepository auth.PlatformRepository
+	Company            *company.Service
+	SecureCookie       bool
 }
 
 type AuthHandler struct {

@@ -50,3 +50,32 @@ BEGIN
 END $$;
 
 COMMIT;
+
+BEGIN;
+
+DO $$
+DECLARE
+    v_platform_user_id BIGINT;
+    v_platform_role_id BIGINT;
+BEGIN
+    INSERT INTO platform_users (name, email, password_hash, is_active)
+    VALUES (
+        'Demo Product Owner',
+        'owner@platform.test',
+        '$argon2id$v=19$m=65536,t=3,p=2$ZyTJ/DXrf1+O9fk3x1tUbA$ly4L0nY5LMamvjtsHd1MtFt+yfDXvLMpigkp4cBLS4s',
+        true
+    )
+    ON CONFLICT (email) DO UPDATE
+        SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash, is_active = true
+    RETURNING id INTO v_platform_user_id;
+
+    SELECT id INTO v_platform_role_id
+    FROM platform_roles
+    WHERE slug = 'product_owner';
+
+    INSERT INTO platform_user_role_assignments (platform_user_id, platform_role_id)
+    VALUES (v_platform_user_id, v_platform_role_id)
+    ON CONFLICT DO NOTHING;
+END $$;
+
+COMMIT;
