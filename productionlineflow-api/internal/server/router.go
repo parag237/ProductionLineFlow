@@ -86,15 +86,14 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	secured.POST("/flows/:id/events", func(c *gin.Context) {
 		c.JSON(200, gin.H{"flow_id": c.Param("id"), "state": "details"})
 	})
-	secured.GET("/warehouses/:id", func(c *gin.Context) {
-		c.JSON(200, gin.H{"id": c.Param("id"), "state": "draft"})
-	})
-	secured.PATCH("/warehouses/:id", func(c *gin.Context) {
-		c.JSON(200, gin.H{"id": c.Param("id"), "state": "draft"})
-	})
-	secured.POST("/warehouses/:id/events", func(c *gin.Context) {
-		c.JSON(200, gin.H{"id": c.Param("id"), "state": "draft"})
-	})
+	if deps != nil && deps.Warehouse != nil {
+		warehouseHandler := NewWarehouseHandler(deps.Warehouse)
+		secured.GET("/warehouses", warehouseHandler.List)
+		secured.POST("/warehouses", warehouseHandler.Create)
+		secured.GET("/warehouses/:id", warehouseHandler.Get)
+		secured.PATCH("/warehouses/:id", warehouseHandler.Update)
+		secured.DELETE("/warehouses/:id", warehouseHandler.Delete)
+	}
 	return r
 }
 

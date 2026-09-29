@@ -7,9 +7,11 @@ const (
 	PasswordSaltLength  = 16
 	PasswordKeyLength   = 32
 
-	PlatformRoleProductOwner  = "product_owner"
-	PermissionCompaniesCreate = "companies.create"
-	PermissionCompaniesManage = "companies.manage"
+	PlatformRoleProductOwner   = "product_owner"
+	PermissionCompaniesCreate  = "companies.create"
+	PermissionCompaniesManage  = "companies.manage"
+	PermissionWarehouseView    = "warehouse.view"
+	PermissionWarehousesManage = "warehouses.manage"
 
 	UserContextKey                = "auth.user"
 	PermissionsContextKey         = "auth.permissions"

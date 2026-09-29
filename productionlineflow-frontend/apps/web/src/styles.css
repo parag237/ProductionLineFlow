@@ -364,6 +364,36 @@ form.form-submitted label:has(input:user-invalid)::after {
   border-top: 1px solid rgba(58, 83, 70, 0.2);
 }
 
+.warehouse-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid rgba(58, 83, 70, 0.2);
+}
+
+.warehouse-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 0;
+  border-bottom: 1px solid rgba(58, 83, 70, 0.16);
+}
+
+.warehouse-row > div:first-child {
+  display: grid;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.warehouse-row strong {
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.warehouse-row span {
+  color: #6d7c74;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.76rem;
+}
+
 .directory-toolbar {
   display: flex;
   justify-content: space-between;
@@ -486,6 +516,15 @@ select {
   .company-row {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  .warehouse-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .warehouse-row > div:first-child {
+    flex-basis: 70%;
   }
 
   .company-row > div:first-child {

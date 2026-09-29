@@ -10,6 +10,7 @@ import (
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
+	warehouseModule "productionlineflow-api/internal/warehouse"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +22,7 @@ type Dependencies struct {
 	Repository         auth.Repository
 	PlatformRepository auth.PlatformRepository
 	Company            *company.Service
+	Warehouse          *warehouseModule.Service
 	SecureCookie       bool
 }
 
