@@ -24,7 +24,7 @@ func TestActorCan(t *testing.T) {
 func TestPlatformActorCanCreateCompanies(t *testing.T) {
 	actor := PlatformActor{
 		Role:        PlatformRoleProductOwner,
-		Permissions: []string{PermissionCompaniesCreate},
+		Permissions: DefaultPlatformRolePermissions(PlatformRoleProductOwner),
 	}
 
 	if err := actor.MustHave(PermissionCompaniesCreate); err != nil {

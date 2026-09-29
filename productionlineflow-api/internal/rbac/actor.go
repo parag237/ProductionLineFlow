@@ -7,6 +7,15 @@ const (
 	PermissionCompaniesCreate = "companies.create"
 )
 
+func DefaultPlatformRolePermissions(role string) []string {
+	switch role {
+	case PlatformRoleProductOwner:
+		return []string{PermissionCompaniesCreate}
+	default:
+		return nil
+	}
+}
+
 type Assignment struct {
 	Permission  string  `json:"permission"`
 	WarehouseID *string `json:"warehouse_id,omitempty"`
