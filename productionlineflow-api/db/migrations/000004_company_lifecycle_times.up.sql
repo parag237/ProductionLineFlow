@@ -1,0 +1,2 @@
+ALTER TABLE companies
+    ADD COLUMN activated_at TIMESTAMPTZ NOT NULL DEFAULT now();

@@ -44,6 +44,7 @@ type Company struct {
 	Name        string     `json:"name"`
 	Status      string     `json:"status"`
 	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
+	ActivatedAt *time.Time `json:"activated_at,omitempty"`
 }
 
 type UpdateInput struct {
@@ -56,6 +57,7 @@ type Repository interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
 	UpdateCompany(ctx context.Context, id int64, input UpdateInput) (Company, error)
 	SuspendCompany(ctx context.Context, id int64) (Company, error)
+	ReactivateCompany(ctx context.Context, id int64) (Company, error)
 }
 
 func (s *Service) List(ctx context.Context, actor rbac.PlatformActor) ([]Company, error) {
@@ -82,6 +84,13 @@ func (s *Service) Suspend(ctx context.Context, actor rbac.PlatformActor, id int6
 		return Company{}, ErrForbidden
 	}
 	return s.repository.SuspendCompany(ctx, id)
+}
+
+func (s *Service) Reactivate(ctx context.Context, actor rbac.PlatformActor, id int64) (Company, error) {
+	if !actor.Can(constants.PermissionCompaniesManage) {
+		return Company{}, ErrForbidden
+	}
+	return s.repository.ReactivateCompany(ctx, id)
 }
 
 type Service struct {

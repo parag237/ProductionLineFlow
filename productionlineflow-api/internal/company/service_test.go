@@ -20,8 +20,15 @@ func (f *fakeRepository) CreateCompany(_ context.Context, _ Input, passwordHash 
 }
 
 func (f *fakeRepository) ListCompanies(context.Context) ([]Company, error) { return nil, nil }
-func (f *fakeRepository) UpdateCompany(context.Context, int64, UpdateInput) (Company, error) { return Company{}, nil }
-func (f *fakeRepository) SuspendCompany(context.Context, int64) (Company, error) { return Company{}, nil }
+func (f *fakeRepository) UpdateCompany(context.Context, int64, UpdateInput) (Company, error) {
+	return Company{}, nil
+}
+func (f *fakeRepository) SuspendCompany(context.Context, int64) (Company, error) {
+	return Company{}, nil
+}
+func (f *fakeRepository) ReactivateCompany(context.Context, int64) (Company, error) {
+	return Company{}, nil
+}
 
 func TestCreateRequiresPlatformPermission(t *testing.T) {
 	repository := &fakeRepository{}

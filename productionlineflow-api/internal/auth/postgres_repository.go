@@ -22,7 +22,7 @@ func (r *PostgresRepository) FindUserByLogin(ctx context.Context, companySlug, e
         SELECT u.id, u.company_id, c.slug, u.name, u.email, u.password_hash, u.is_active, u.perm_version
         FROM users u
         JOIN companies c ON c.id = u.company_id
-        WHERE c.slug = $1 AND u.email = $2
+		WHERE c.slug = $1 AND u.email = $2 AND c.status = 'active'
     `, companySlug, email))
 }
 
@@ -31,7 +31,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, userID, companyID
         SELECT u.id, u.company_id, c.slug, u.name, u.email, u.password_hash, u.is_active, u.perm_version
         FROM users u
         JOIN companies c ON c.id = u.company_id
-        WHERE u.id = $1 AND u.company_id = $2
+		WHERE u.id = $1 AND u.company_id = $2 AND c.status = 'active'
     `, userID, companyID))
 }
 
@@ -137,7 +137,7 @@ func (r *PostgresRepository) RotateRefreshToken(ctx context.Context, oldHash, ne
         SELECT u.id, u.company_id, c.slug, u.name, u.email, u.password_hash, u.is_active, u.perm_version
         FROM users u
         JOIN companies c ON c.id = u.company_id
-        WHERE u.id = $1 AND u.company_id = $2
+		WHERE u.id = $1 AND u.company_id = $2 AND c.status = 'active'
     `, userID, companyID))
 	if err != nil {
 		return User{}, err

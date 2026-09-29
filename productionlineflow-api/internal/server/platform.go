@@ -204,6 +204,25 @@ func (h *PlatformHandler) SuspendCompany(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
+func (h *PlatformHandler) ReactivateCompany(c *gin.Context) {
+	actor, ok := platformActor(c)
+	if !ok {
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_id", "Invalid company id")
+		return
+	}
+	item, err := h.companyService.Reactivate(c.Request.Context(), actor, id)
+	if err != nil {
+		h.writeCompanyError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
 func platformActor(c *gin.Context) (rbac.PlatformActor, bool) {
 	value, ok := c.Get(constants.PlatformActorContextKey)
 	actor, valid := value.(rbac.PlatformActor)

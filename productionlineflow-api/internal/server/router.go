@@ -48,6 +48,7 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		platformSecured.GET("/companies", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.ListCompanies)
 		platformSecured.PATCH("/companies/:id", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.UpdateCompany)
 		platformSecured.POST("/companies/:id/suspend", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.SuspendCompany)
+		platformSecured.POST("/companies/:id/reactivate", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.ReactivateCompany)
 	}
 	if deps == nil || deps.Auth == nil {
 		v1.POST("/auth/login", authUnavailable)
