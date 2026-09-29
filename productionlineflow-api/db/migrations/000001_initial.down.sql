@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS flow_sessions;
+DROP TRIGGER IF EXISTS user_role_assignment_integrity ON user_role_assignments;
+DROP FUNCTION IF EXISTS validate_user_role_assignment();
+DROP TABLE IF EXISTS user_role_assignments;
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS warehouses;
+DROP TABLE IF EXISTS warehouse_types;
+DROP TABLE IF EXISTS platform_user_role_assignments;
+DROP TABLE IF EXISTS platform_role_permissions;
+DROP TABLE IF EXISTS platform_roles;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS platform_users;
+DROP TABLE IF EXISTS companies;
