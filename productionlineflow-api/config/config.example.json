@@ -16,6 +16,7 @@
   },
   "auth": {
     "jwt_secret": "change-me-dev-secret",
+    "jwt_issuer": "productionlineflow-api",
     "access_ttl_min": 15,
     "refresh_ttl_hours": 168,
     "min_password_length": 10

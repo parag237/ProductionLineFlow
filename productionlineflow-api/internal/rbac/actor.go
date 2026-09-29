@@ -1,34 +1,32 @@
 package rbac
 
-import "fmt"
-
-const (
-	PlatformRoleProductOwner  = "product_owner"
-	PermissionCompaniesCreate = "companies.create"
+import (
+	"fmt"
+	"productionlineflow-api/internal/constants"
 )
 
 func DefaultPlatformRolePermissions(role string) []string {
 	switch role {
-	case PlatformRoleProductOwner:
-		return []string{PermissionCompaniesCreate}
+	case constants.PlatformRoleProductOwner:
+		return []string{constants.PermissionCompaniesCreate}
 	default:
 		return nil
 	}
 }
 
 type Assignment struct {
-	Permission  string  `json:"permission"`
-	WarehouseID *string `json:"warehouse_id,omitempty"`
+	Permission  string `json:"permission"`
+	WarehouseID *int64 `json:"warehouse_id,omitempty"`
 }
 
 type Actor struct {
-	UserID      string       `json:"user_id"`
-	CompanyID   string       `json:"company_id"`
+	UserID      int64        `json:"user_id"`
+	CompanyID   int64        `json:"company_id"`
 	Assignments []Assignment `json:"assignments"`
 }
 
 type PlatformActor struct {
-	UserID      string   `json:"user_id"`
+	UserID      int64    `json:"user_id"`
 	Role        string   `json:"role"`
 	Permissions []string `json:"permissions"`
 }
@@ -49,7 +47,7 @@ func (a PlatformActor) MustHave(permission string) error {
 	return nil
 }
 
-func (a Actor) Can(permission string, warehouseID *string) bool {
+func (a Actor) Can(permission string, warehouseID *int64) bool {
 	for _, as := range a.Assignments {
 		if as.Permission != permission {
 			continue
@@ -64,7 +62,7 @@ func (a Actor) Can(permission string, warehouseID *string) bool {
 	return false
 }
 
-func (a Actor) MustHave(permission string, warehouseID *string) error {
+func (a Actor) MustHave(permission string, warehouseID *int64) error {
 	if !a.Can(permission, warehouseID) {
 		return fmt.Errorf("forbidden: missing permission %q", permission)
 	}

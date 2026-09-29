@@ -8,20 +8,20 @@ import (
 )
 
 type Config struct {
-	Env      string        `json:"env"`
-	Server   ServerConfig  `json:"server"`
+	Env      string         `json:"env"`
+	Server   ServerConfig   `json:"server"`
 	Database DatabaseConfig `json:"database"`
 	Redis    RedisConfig    `json:"redis"`
-	Auth     AuthConfig    `json:"auth"`
-	Flows    FlowsConfig   `json:"flows"`
-	Log      LogConfig     `json:"log"`
+	Auth     AuthConfig     `json:"auth"`
+	Flows    FlowsConfig    `json:"flows"`
+	Log      LogConfig      `json:"log"`
 }
 
 type ServerConfig struct {
-	Port              int      `json:"port"`
-	ReadTimeoutSec    int      `json:"read_timeout_sec"`
-	WriteTimeoutSec   int      `json:"write_timeout_sec"`
-	AllowedOrigins    []string `json:"allowed_origins"`
+	Port            int      `json:"port"`
+	ReadTimeoutSec  int      `json:"read_timeout_sec"`
+	WriteTimeoutSec int      `json:"write_timeout_sec"`
+	AllowedOrigins  []string `json:"allowed_origins"`
 }
 
 type DatabaseConfig struct {
@@ -36,6 +36,7 @@ type RedisConfig struct {
 
 type AuthConfig struct {
 	JWTSecret         string `json:"jwt_secret"`
+	JWTIssuer         string `json:"jwt_issuer"`
 	AccessTTLMin      int    `json:"access_ttl_min"`
 	RefreshTTLHours   int    `json:"refresh_ttl_hours"`
 	MinPasswordLength int    `json:"min_password_length"`
@@ -96,6 +97,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret is required")
+	}
+	if c.Auth.JWTIssuer == "" {
+		return fmt.Errorf("auth.jwt_issuer is required")
 	}
 	if c.Auth.MinPasswordLength < 8 {
 		return fmt.Errorf("auth.min_password_length must be at least 8")

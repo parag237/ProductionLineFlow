@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -9,31 +10,55 @@ import (
 type JWTService struct {
 	secret []byte
 	ttl    time.Duration
+	issuer string
 }
 
-func NewJWTService(secret string, ttl time.Duration) *JWTService {
-	return &JWTService{secret: []byte(secret), ttl: ttl}
+type AccessClaims struct {
+	UserID      int64  `json:"user_id"`
+	CompanyID   int64  `json:"company_id"`
+	PermVersion int    `json:"perm_version"`
+	TokenType   string `json:"token_type"`
+	jwt.RegisteredClaims
 }
 
-func (s *JWTService) Sign(claims map[string]any) (string, error) {
-	payload := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(claims))
+func NewJWTService(secret string, ttl time.Duration, issuer string) *JWTService {
+	return &JWTService{secret: []byte(secret), ttl: ttl, issuer: issuer}
+}
+
+func (s *JWTService) SignAccess(userID, companyID int64, permVersion int) (string, error) {
+	now := time.Now()
+	claims := AccessClaims{
+		UserID:      userID,
+		CompanyID:   companyID,
+		PermVersion: permVersion,
+		TokenType:   "tenant_access",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    s.issuer,
+			Subject:   fmt.Sprintf("%d", userID),
+			ID:        fmt.Sprintf("%d-%d", userID, now.UnixNano()),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
+		},
+	}
+	payload := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return payload.SignedString(s.secret)
 }
 
-func (s *JWTService) Validate(token string) (map[string]any, error) {
-	parsed, err := jwt.Parse(token, func(token *jwt.Token) (any, error) {
+func (s *JWTService) ValidateAccess(token string) (*AccessClaims, error) {
+	claims := &AccessClaims{}
+	parsed, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
 		return s.secret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(s.issuer))
 	if err != nil {
 		return nil, err
 	}
-	if !parsed.Valid {
+	if !parsed.Valid || claims.TokenType != "tenant_access" {
 		return nil, jwt.ErrTokenInvalidClaims
 	}
-	if claims, ok := parsed.Claims.(jwt.MapClaims); ok {
-		return map[string]any(claims), nil
-	}
-	return nil, jwt.ErrTokenInvalidClaims
+	return claims, nil
 }
 
 func (s *JWTService) TTL() time.Duration {
