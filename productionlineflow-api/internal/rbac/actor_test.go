@@ -21,6 +21,25 @@ func TestActorCan(t *testing.T) {
 	}
 }
 
+func TestPlatformActorCanCreateCompanies(t *testing.T) {
+	actor := PlatformActor{
+		Role:        PlatformRoleProductOwner,
+		Permissions: []string{PermissionCompaniesCreate},
+	}
+
+	if err := actor.MustHave(PermissionCompaniesCreate); err != nil {
+		t.Fatalf("product owner should be able to create companies: %v", err)
+	}
+	if actor.Can("warehouses.manage") {
+		t.Fatal("company creation permission should not grant tenant permissions")
+	}
+
+	unauthorized := PlatformActor{Role: PlatformRoleProductOwner}
+	if unauthorized.Can(PermissionCompaniesCreate) {
+		t.Fatal("product owner without companies.create should not create companies")
+	}
+}
+
 func stringPtr(s string) *string {
 	return &s
 }

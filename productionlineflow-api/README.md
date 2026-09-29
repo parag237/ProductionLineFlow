@@ -21,7 +21,7 @@ APP_ENV=dev CONFIG_DIR=./config go run ./cmd/api
 
 ## Next built stages
 
-1. Company bootstrap and migrations
+1. Product Owner platform access and atomic company/Super Admin onboarding with migrations
 2. Auth login, refresh rotation, and `/me`
 3. Users and assignments APIs
 4. Full FSM-driven warehouse lifecycle and SDUI flow execution

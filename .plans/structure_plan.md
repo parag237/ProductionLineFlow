@@ -31,6 +31,7 @@
 ## 1. Requirements
 
 - A company has multiple warehouses. Each has its own name and its own type (factory, packing department, dispatch, or any other department). Types are data.
+- A platform-scoped **Product Owner** creates companies and provisions each company's initial Super Admin. Product Owners are not members of tenant companies.
 - One **Super Admin** per company. Under them, multiple **Admins**, managed by the Super Admin only.
 - A user can hold **multiple roles** (e.g. `admin` company-wide, `manager` of WH-A, `worker` of WH-B).
 - **Warehouses have no minimum staffing.** A warehouse may have zero managers, zero workers, or any mix.
@@ -44,8 +45,15 @@
 
 ## 2. RBAC Model
 
+Platform authorization is separate from tenant authorization. A `product_owner` has the platform permission `companies.create`; it can create a company and its initial Super Admin, but receives no tenant permissions or ongoing access to that company. Tenant `Actor` checks cannot authorize platform endpoints; those endpoints load a `PlatformActor` and check platform permissions.
+
 ```mermaid
 flowchart LR
+  PlatformUser --> PlatformAssignment
+  PlatformRole --> PlatformAssignment
+  PlatformPermission --> PlatformRolePermission
+  PlatformRole --> PlatformRolePermission
+  PlatformAssignment --> PlatformCanCheck["PlatformActor.Can(perm)"]
   User --> Assignment
   Role --> Assignment
   Warehouse -.-> Assignment
@@ -56,6 +64,7 @@ flowchart LR
 
 ### 2.1 Scope rules
 
+- **Platform-scoped roles** (`product_owner`) belong to platform accounts, not companies, and are checked only by platform authorization. They do not use `warehouse_id` and are never assigned to tenant users.
 - **Company-scoped roles** (`super_admin`, `admin`, later custom company roles): `warehouse_id` is NULL. Grants apply in **every** warehouse of that company.
 - **Warehouse-scoped roles** (`manager`, `worker`, later custom warehouse roles): `warehouse_id` is required. Grants apply **only** in that warehouse.
 - Effective access is the **union** of all of a user's assignments.
@@ -67,6 +76,7 @@ Keys are migration-owned and stable. Super Admin can attach/detach them on **the
 
 | Key | Meaning | Seeded on |
 |---|---|---|
+| `companies.create` | Create a company and provision its initial Super Admin | platform `product_owner` only |
 | `admins.manage` | Create/edit/delete admins, assign `admin`/`super_admin` | `super_admin` only |
 | `roles.manage` | Edit `role_permissions`, create custom roles | `super_admin` only |
 | `users.create` | Create company-level users | `super_admin`, `admin` |
@@ -83,6 +93,7 @@ Keys are migration-owned and stable. Super Admin can attach/detach them on **the
 
 | Actor | May assign / remove |
 |---|---|
+| **Product Owner** | Create a company and provision its initial `super_admin` in the same onboarding operation. No ongoing tenant access or tenant role assignment. |
 | **Super Admin** | Any role, including admins. Cannot remove the last `super_admin`. |
 | **Admin** | Warehouse-scoped roles (`manager`, `worker`, custom warehouse roles) in any warehouse. Cannot edit `role_permissions`. Cannot assign `admin` / `super_admin`. |
 | **Manager** | `worker` only (v1), in warehouses where they hold `warehouse.members.manage`. |
@@ -90,6 +101,9 @@ Keys are migration-owned and stable. Super Admin can attach/detach them on **the
 
 ### 2.4 Guards on editing `role_permissions`
 
+- Product Owner authorization is checked through `PlatformActor` and `companies.create`, never through a tenant `Actor` or tenant role.
+- Company onboarding is atomic: create the company, seed its four tenant system roles and default permissions, create the initial Super Admin, and assign that user the `super_admin` role. Roll back the entire operation if any step fails.
+- Product Owners are provisioned through a one-time operator bootstrap; do not ship a default Product Owner account or credentials.
 - System roles cannot be deleted and their slugs cannot change.
 - Cannot strip `admins.manage` and `roles.manage` from `super_admin` (company lockout).
 - Only holders of `roles.manage` mutate the catalog, and only for their own company.
@@ -128,6 +142,34 @@ CREATE UNIQUE INDEX users_company_email ON users (company_id, email);
 
 There is no `users.role` column. Deactivated users still occupy their `(company_id, email)` slot; reuse means reactivating that row or changing the old email.
 
+Platform accounts are stored separately and have globally unique email addresses. They are not assigned a `company_id` and cannot log in through the tenant login flow.
+
+```sql
+CREATE TABLE platform_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email CITEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  perm_version INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE platform_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,             -- 'product_owner'
+  is_system BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE platform_user_role_assignments (
+  platform_user_id UUID NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+  platform_role_id UUID NOT NULL REFERENCES platform_roles(id),
+  PRIMARY KEY (platform_user_id, platform_role_id)
+);
+```
+
+Migrations seed the `product_owner` platform role and grant it `companies.create`; tenant roles remain company-owned as defined below.
+
 ### 3.2 Warehouses
 
 ```sql
@@ -160,6 +202,12 @@ CREATE TABLE permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   key TEXT NOT NULL UNIQUE,             -- 'admins.manage'
   description TEXT NOT NULL
+);
+
+CREATE TABLE platform_role_permissions (
+  platform_role_id UUID NOT NULL REFERENCES platform_roles(id) ON DELETE CASCADE,
+  permission_id UUID NOT NULL REFERENCES permissions(id),
+  PRIMARY KEY (platform_role_id, permission_id)
 );
 
 CREATE TABLE roles (
@@ -243,6 +291,8 @@ CREATE INDEX ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
 ---
 
 ## 4. Authentication
+
+Platform login is separate from tenant login. `POST /platform/auth/login` authenticates against `platform_users`; its access token identifies a platform actor and has no `company_id`. Platform middleware loads platform permissions and is used only on `/platform/*` routes.
 
 ### 4.1 Login
 
@@ -490,6 +540,11 @@ POST  /auth/login | /auth/refresh | /auth/logout
 GET   /me
 PATCH /me/password
 
+# Platform onboarding (platform authentication, not tenant authentication)
+POST  /platform/auth/login
+POST  /platform/auth/refresh | /platform/auth/logout
+POST  /platform/companies                # requires platform companies.create
+
 # Server-driven UI
 GET   /navigation                        # derived from the permission union
 GET   /screens/:name                     # stateless screens (dashboards, lists)
@@ -514,6 +569,8 @@ POST              /warehouses/{id}/events  # Idempotency-Key
 GET               /warehouses/{id}/members
 ```
 
+`POST /platform/companies` accepts `{ "name": "...", "slug": "...", "super_admin": { "name": "...", "email": "...", "password": "..." } }`. The service hashes the password with argon2id and returns the created company plus the initial Super Admin's non-sensitive fields; it never returns credentials or grants the Product Owner tenant access.
+
 `POST /warehouses/{id}/managers` and the earlier `/workers` routes are replaced by `POST /users/{id}/role-assignments`.
 
 ### Gin router skeleton
@@ -528,6 +585,10 @@ func NewRouter(cfg *config.Config, d *Deps) *gin.Engine {
     v1 := r.Group("/api/v1")
     v1.POST("/auth/login", d.Auth.Login)
     v1.POST("/auth/refresh", d.Auth.Refresh)
+
+    v1.POST("/platform/auth/login", d.PlatformAuth.Login)
+    platform := v1.Group("/platform", middleware.PlatformJWT(cfg.Auth), middleware.LoadPlatformActor(d.PlatformPerms))
+    platform.POST("/companies", d.Companies.CreateWithInitialSuperAdmin) // companies.create
 
     sec := v1.Group("", middleware.JWT(cfg.Auth), middleware.LoadActor(d.Perms)) // no role gate
     sec.GET("/me", d.Me.Get)
@@ -661,6 +722,8 @@ internal/
   screens/                  # stateless screen builders + registry
   navigation/               # permission-derived menu
   auth/                     # login, refresh rotation, JWT, argon2id
+  platformauth/             # platform login, Product Owner authorization
+  company/                  # company onboarding + initial Super Admin transaction
   rbac/                     # Actor, Can(), assignments, role/permission admin
   user/  warehouse/
   platform/{db,httpx,cache}/
@@ -694,9 +757,9 @@ packages/
 
 ## 12. Build Order
 
-1. Config loader (`APP_ENV` + `CONFIG_DIR`), Gin skeleton, Docker Compose, migrations (companies, users, RBAC tables, `flow_sessions`, `refresh_tokens`).
-2. Company bootstrap command: create company, seed four system roles with default permissions, create the Super Admin (with password).
-3. Auth: login with company slug, refresh rotation, logout, `/me`, `Actor.Can`, `perm_version` cache.
+1. Config loader (`APP_ENV` + `CONFIG_DIR`), Gin skeleton, Docker Compose, migrations (platform accounts/roles, companies, users, RBAC tables, `flow_sessions`, `refresh_tokens`).
+2. One-time operator bootstrap for the first Product Owner; platform login and company onboarding API that atomically creates the company, seeds four tenant system roles/default permissions, creates the initial Super Admin with a hashed password, and assigns `super_admin`.
+3. Auth: separate platform and tenant login/refresh/logout, company-slug tenant login, `/me`, `PlatformActor.Can`, `Actor.Can`, and `perm_version` cache.
 4. FSM engine with unit tests. Transition tables are pure logic and easy to test.
 5. Users and role assignments APIs with the assignment integrity rules and last-Super-Admin protection.
 6. `ui` package and the `warehouse_create` flow end to end, plus the warehouse domain FSM (`POST /warehouses/{id}/events`).
