@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +24,10 @@ func (r *PostgresRepository) CreateCompany(ctx context.Context, input Input, pas
 
 	var result Result
 	if err := tx.QueryRow(ctx, `INSERT INTO companies (slug, name) VALUES ($1, $2) RETURNING id, slug, name`, input.Slug, input.Name).Scan(&result.ID, &result.Slug, &result.Name); err != nil {
+		var pgError *pgconn.PgError
+		if errors.As(err, &pgError) && pgError.Code == "23505" && pgError.ConstraintName == "companies_slug_key" {
+			return Result{}, ErrDuplicateSlug
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Result{}, err
 		}
@@ -53,6 +58,10 @@ func (r *PostgresRepository) CreateCompany(ctx context.Context, input Input, pas
 		}
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO users (company_id, name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, name, email`, result.ID, input.SuperAdminName, input.SuperAdminEmail, passwordHash).Scan(&result.SuperAdminID, &result.SuperAdminName, &result.SuperAdminEmail); err != nil {
+		var pgError *pgconn.PgError
+		if errors.As(err, &pgError) && pgError.Code == "23505" && pgError.ConstraintName == "users_company_email" {
+			return Result{}, ErrDuplicateAdminEmail
+		}
 		return Result{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO user_role_assignments (company_id, user_id, role_id) VALUES ($1, $2, $3)`, result.ID, result.SuperAdminID, roleIDs["super_admin"]); err != nil {

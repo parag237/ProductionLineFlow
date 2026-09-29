@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Dependencies struct {

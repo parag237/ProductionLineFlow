@@ -259,12 +259,17 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [adminPasswordConfirmation, setAdminPasswordConfirmation] = useState('');
   const [createError, setCreateError] = useState('');
   const [createdCompany, setCreatedCompany] = useState<{ Name: string; Slug: string; SuperAdminEmail: string } | null>(null);
 
   async function createCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreateError('');
+    if (adminPassword !== adminPasswordConfirmation) {
+      setCreateError('The Super Admin passwords must match.');
+      return;
+    }
     try {
       const result = await platformRequest<{ Name: string; Slug: string; SuperAdminEmail: string }>('/companies', {
         method: 'POST',
@@ -272,6 +277,7 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
       });
       setCreatedCompany(result);
       setAdminPassword('');
+      setAdminPasswordConfirmation('');
     } catch (error) {
       setCreateError((error as ApiError).message);
     }
@@ -286,7 +292,7 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
           {canCreateCompany && !showCreate && !createdCompany && <button className="workspace-card" onClick={() => setShowCreate(true)}><span className="card-arrow">＋</span><span className="card-label">Create company</span><span className="card-meta">Provision a company and its first Super Admin</span></button>}
           {!canCreateCompany && <div className="empty-state">This platform account has no company-management permissions.</div>}
         </div>
-        {showCreate && !createdCompany && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">New tenant workspace</span><h2>Create company</h2><p>Provision the company and its first Super Admin in one transaction.</p></div><form onSubmit={createCompany}><label>Company name<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required /></label><label>Company slug<input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label><label>Super Admin name<input value={adminName} onChange={(event) => setAdminName(event.target.value)} required /></label><label>Super Admin email<input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} required /></label><label>Temporary password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} required /></label>{createError && <div className="form-error" role="alert">{createError}</div>}<button className="primary-button" type="submit">Provision company</button></form></section>}
+        {showCreate && !createdCompany && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">New tenant workspace</span><h2>Create company</h2><p>Provision the company and its first Super Admin in one transaction.</p></div><form onSubmit={createCompany}><label>Company name<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required /></label><label>Company slug<input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label><label>Super Admin name<input value={adminName} onChange={(event) => setAdminName(event.target.value)} required /></label><label>Super Admin email<input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} required /></label><label>Temporary password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} minLength={10} required /></label><label>Confirm password<input type="password" value={adminPasswordConfirmation} onChange={(event) => setAdminPasswordConfirmation(event.target.value)} minLength={10} required /></label>{createError && <div className="form-error" role="alert">{createError}</div>}<button className="primary-button" type="submit">Provision company</button></form></section>}
         {createdCompany && <section className="login-panel onboarding-panel"><span className="panel-kicker">Provisioning complete</span><h2>{createdCompany.Name}</h2><p>Workspace <strong>{createdCompany.Slug}</strong> is ready. The initial Super Admin is {createdCompany.SuperAdminEmail}.</p><button className="quiet-button" onClick={() => { setCreatedCompany(null); setShowCreate(false); }}>Create another company</button></section>}
       </section>
     </main>

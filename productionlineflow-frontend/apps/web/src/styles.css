@@ -104,6 +104,14 @@ label {
   font-weight: 700;
 }
 
+label:has(input:required)::after {
+  content: 'Required';
+  order: 3;
+  color: #718078;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
 input {
   width: 100%;
   min-height: 3rem;
@@ -118,6 +126,16 @@ input {
 input:focus {
   border-color: #3b705d;
   box-shadow: 0 0 0 3px rgba(59, 112, 93, 0.16);
+}
+
+input:user-invalid,
+input:invalid:not(:placeholder-shown) {
+  border-color: #b64e43;
+}
+
+label:has(input:user-invalid)::after {
+  color: #8b342d;
+  font-weight: 700;
 }
 
 .primary-button,

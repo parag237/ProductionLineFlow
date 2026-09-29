@@ -8,10 +8,14 @@ import (
 	"strings"
 
 	"productionlineflow-api/internal/auth"
+	"productionlineflow-api/internal/constants"
+	"productionlineflow-api/internal/rbac"
 )
 
 var ErrInvalidInput = errors.New("invalid company onboarding input")
 var ErrDuplicateSlug = errors.New("company slug already exists")
+var ErrDuplicateAdminEmail = errors.New("initial super admin email already exists")
+var ErrForbidden = errors.New("platform actor cannot create companies")
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -45,7 +49,10 @@ func NewService(repository Repository, minPassword int) *Service {
 	return &Service{repository: repository, minPassword: minPassword}
 }
 
-func (s *Service) Create(ctx context.Context, input Input) (Result, error) {
+func (s *Service) Create(ctx context.Context, actor rbac.PlatformActor, input Input) (Result, error) {
+	if !actor.Can(constants.PermissionCompaniesCreate) {
+		return Result{}, ErrForbidden
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Slug = strings.TrimSpace(strings.ToLower(input.Slug))
 	input.SuperAdminName = strings.TrimSpace(input.SuperAdminName)

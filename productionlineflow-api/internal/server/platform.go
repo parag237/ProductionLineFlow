@@ -4,11 +4,12 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
+
+	"github.com/gin-gonic/gin"
 )
 
 type PlatformHandler struct {
@@ -104,14 +105,36 @@ func (h *PlatformHandler) CreateCompany(c *gin.Context) {
 			Password string `json:"password" binding:"required"`
 		} `json:"super_admin" binding:"required"`
 	}
+	value, ok := c.Get(constants.PlatformActorContextKey)
+	actor, valid := value.(rbac.PlatformActor)
+	if !ok || !valid {
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+		return
+	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, "invalid_request", "Invalid company request")
 		return
 	}
-	result, err := h.companyService.Create(c.Request.Context(), company.Input{Name: request.Name, Slug: request.Slug, SuperAdminName: request.SuperAdmin.Name, SuperAdminEmail: request.SuperAdmin.Email, SuperAdminPassword: request.SuperAdmin.Password})
+	if h.companyService == nil {
+		writeError(c, http.StatusServiceUnavailable, "onboarding_unavailable", "Company onboarding is unavailable")
+		return
+	}
+	result, err := h.companyService.Create(c.Request.Context(), actor, company.Input{Name: request.Name, Slug: request.Slug, SuperAdminName: request.SuperAdmin.Name, SuperAdminEmail: request.SuperAdmin.Email, SuperAdminPassword: request.SuperAdmin.Password})
 	if err != nil {
 		if errors.Is(err, company.ErrInvalidInput) {
 			writeError(c, http.StatusBadRequest, "invalid_request", "Invalid company request")
+			return
+		}
+		if errors.Is(err, company.ErrForbidden) {
+			writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+			return
+		}
+		if errors.Is(err, company.ErrDuplicateSlug) {
+			writeError(c, http.StatusConflict, "duplicate_company_slug", "Company slug already exists")
+			return
+		}
+		if errors.Is(err, company.ErrDuplicateAdminEmail) {
+			writeError(c, http.StatusConflict, "duplicate_super_admin_email", "Super Admin email already exists for this company")
 			return
 		}
 		writeError(c, http.StatusConflict, "company_creation_failed", "Unable to create company")
