@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/gin-gonic/gin"
-	"warehouse-api/internal/config"
+	"productionlineflow-api/internal/config"
 )
 
 func NewRouter(cfg *config.Config) *gin.Engine {

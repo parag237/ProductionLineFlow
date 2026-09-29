@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"warehouse-api/internal/config"
-	"warehouse-api/internal/server"
+	"productionlineflow-api/internal/config"
+	"productionlineflow-api/internal/server"
 )
 
 func main() {

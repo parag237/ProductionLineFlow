@@ -2,8 +2,8 @@ package flows
 
 import (
 	"context"
-	"warehouse-api/internal/fsm"
-	"warehouse-api/internal/ui"
+	"productionlineflow-api/internal/fsm"
+	"productionlineflow-api/internal/ui"
 )
 
 var WarehouseCreate = fsm.Definition{

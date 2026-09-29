@@ -1,6 +1,6 @@
-# Warehouse API
+# ProductionLineFlow API
 
-This backend is the first implementation slice of the multi-warehouse management system described in the project plan.
+This backend is the first implementation slice of the ProductionLineFlow multi-warehouse management system described in the project plan.
 
 ## Included
 
@@ -14,7 +14,7 @@ This backend is the first implementation slice of the multi-warehouse management
 ## Quick start
 
 ```bash
-cd warehouse-api
+cd productionlineflow-api
 go test ./...
 APP_ENV=dev CONFIG_DIR=./config go run ./cmd/api
 ```

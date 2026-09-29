@@ -1,4 +1,6 @@
-# Multi-Warehouse Management System: Structure Plan (v2)
+# ProductionLineFlow: Multi-Warehouse Management System Structure Plan (v2)
+
+**Project name:** ProductionLineFlow
 
 **Implementation status:** Phase 1 scaffold complete. The backend skeleton, config loader, RBAC checks, FSM foundation, and the web frontend shell are in place and verified to compile successfully.
 
@@ -559,7 +561,7 @@ Two documented environment variables:
 - `CONFIG_DIR`: directory of JSON files, default `config` if unset. The loader always reads the variable; Compose and prod always set it.
 
 ```
-warehouse-api/config/
+productionlineflow-api/config/
   config.dev.json
   config.test.json
   config.prod.json
@@ -645,7 +647,7 @@ func Load() (*Config, error) {
 
 ## 11. Project Structure
 
-### Backend: `warehouse-api/`
+### Backend: `productionlineflow-api/`
 
 ```
 cmd/api/main.go
@@ -672,7 +674,7 @@ docker-compose.yml
 
 Flow: **handler → service/FSM → repository**. Business rules live only in the service and FSM layers.
 
-### Frontend: `warehouse-frontend/`
+### Frontend: `productionlineflow-frontend/`
 
 ```
 apps/

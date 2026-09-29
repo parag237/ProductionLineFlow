@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"warehouse-api/internal/fsm"
+	"productionlineflow-api/internal/fsm"
 )
 
 var WarehouseLifecycle = fsm.Definition{

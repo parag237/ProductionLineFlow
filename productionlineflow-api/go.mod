@@ -1,4 +1,4 @@
-module warehouse-api
+module productionlineflow-api
 
 go 1.22
 

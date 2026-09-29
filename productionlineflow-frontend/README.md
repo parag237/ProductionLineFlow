@@ -1,4 +1,4 @@
-# Warehouse Frontend
+# ProductionLineFlow Frontend
 
 This workspace contains the TypeScript monorepo scaffold for the web and mobile clients.
 
