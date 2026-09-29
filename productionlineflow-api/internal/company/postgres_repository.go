@@ -72,3 +72,50 @@ func (r *PostgresRepository) CreateCompany(ctx context.Context, input Input, pas
 	}
 	return result, nil
 }
+
+func (r *PostgresRepository) ListCompanies(ctx context.Context) ([]Company, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, slug, name, status, suspended_at FROM companies ORDER BY name, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var companies []Company
+	for rows.Next() {
+		var item Company
+		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.Status, &item.SuspendedAt); err != nil {
+			return nil, err
+		}
+		companies = append(companies, item)
+	}
+	return companies, rows.Err()
+}
+
+func (r *PostgresRepository) UpdateCompany(ctx context.Context, id int64, input UpdateInput) (Company, error) {
+	var item Company
+	err := r.pool.QueryRow(ctx, `
+		UPDATE companies SET name = $2, slug = $3, updated_at = now()
+		WHERE id = $1
+		RETURNING id, slug, name, status, suspended_at
+	`, id, input.Name, input.Slug).Scan(&item.ID, &item.Slug, &item.Name, &item.Status, &item.SuspendedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Company{}, ErrNotFound
+	}
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) && pgError.Code == "23505" {
+		return Company{}, ErrDuplicateSlug
+	}
+	return item, err
+}
+
+func (r *PostgresRepository) SuspendCompany(ctx context.Context, id int64) (Company, error) {
+	var item Company
+	err := r.pool.QueryRow(ctx, `
+		UPDATE companies SET status = 'suspended', suspended_at = COALESCE(suspended_at, now()), updated_at = now()
+		WHERE id = $1
+		RETURNING id, slug, name, status, suspended_at
+	`, id).Scan(&item.ID, &item.Slug, &item.Name, &item.Status, &item.SuspendedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Company{}, ErrNotFound
+	}
+	return item, err
+}

@@ -32,6 +32,10 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api
 let accessToken = '';
 let platformAccessToken = '';
 
+function markFormSubmitted(event: FormEvent<HTMLFormElement>) {
+  event.currentTarget.classList.add('form-submitted');
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
@@ -71,6 +75,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 
 type PlatformUser = { id: number; name: string; email: string };
 type PlatformSession = { access_token: string; user: PlatformUser; permissions: string[] };
+type PlatformCompany = { id: number; slug: string; name: string; status: 'active' | 'suspended'; suspended_at?: string };
 
 async function platformRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
@@ -136,7 +141,7 @@ function LoginView({ onLogin }: { onLogin: (session: SessionResponse) => void })
           <h2 id="login-title">Sign in</h2>
           <p>Use your company workspace credentials.</p>
         </div>
-        <form onSubmit={submit}>
+        <form onSubmit={submit} onInvalid={markFormSubmitted}>
           <label>
             Company workspace
             <input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} autoComplete="organization" required placeholder="acme" />
@@ -240,7 +245,7 @@ function PlatformLogin({ onLogin }: { onLogin: (session: PlatformSession) => voi
           <h2 id="platform-login-title">Platform sign in</h2>
           <p>This area is separate from tenant warehouse workspaces.</p>
         </div>
-        <form onSubmit={submit}>
+        <form onSubmit={submit} onInvalid={markFormSubmitted}>
           <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required /></label>
           <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
           {error && <div className="form-error" role="alert">{error}</div>}
@@ -262,6 +267,21 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
   const [adminPasswordConfirmation, setAdminPasswordConfirmation] = useState('');
   const [createError, setCreateError] = useState('');
   const [createdCompany, setCreatedCompany] = useState<{ Name: string; Slug: string; SuperAdminEmail: string } | null>(null);
+  const [companies, setCompanies] = useState<PlatformCompany[]>([]);
+  const [editingCompany, setEditingCompany] = useState<PlatformCompany | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSlug, setEditSlug] = useState('');
+  const [managementError, setManagementError] = useState('');
+
+  async function refreshCompanies() {
+    if (!permissions.includes('companies.manage')) return;
+    const result = await platformRequest<{ companies: PlatformCompany[] }>('/companies');
+    setCompanies(result.companies);
+  }
+
+  useEffect(() => {
+    refreshCompanies().catch((error) => setManagementError((error as ApiError).message));
+  }, [permissions]);
 
   async function createCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -278,9 +298,34 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
       setCreatedCompany(result);
       setAdminPassword('');
       setAdminPasswordConfirmation('');
+      await refreshCompanies();
     } catch (error) {
       setCreateError((error as ApiError).message);
     }
+  }
+
+  function beginEdit(item: PlatformCompany) {
+    setEditingCompany(item);
+    setEditName(item.name);
+    setEditSlug(item.slug);
+    setManagementError('');
+  }
+
+  async function updateCompany(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingCompany) return;
+    try {
+      await platformRequest(`/companies/${editingCompany.id}`, { method: 'PATCH', body: JSON.stringify({ name: editName, slug: editSlug }) });
+      setEditingCompany(null);
+      await refreshCompanies();
+    } catch (error) { setManagementError((error as ApiError).message); }
+  }
+
+  async function suspendCompany(id: number) {
+    try {
+      await platformRequest(`/companies/${id}/suspend`, { method: 'POST' });
+      await refreshCompanies();
+    } catch (error) { setManagementError((error as ApiError).message); }
   }
 
   return (
@@ -292,8 +337,10 @@ function PlatformWorkspace({ user, permissions, onLogout }: { user: PlatformUser
           {canCreateCompany && !showCreate && !createdCompany && <button className="workspace-card" onClick={() => setShowCreate(true)}><span className="card-arrow">＋</span><span className="card-label">Create company</span><span className="card-meta">Provision a company and its first Super Admin</span></button>}
           {!canCreateCompany && <div className="empty-state">This platform account has no company-management permissions.</div>}
         </div>
-        {showCreate && !createdCompany && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">New tenant workspace</span><h2>Create company</h2><p>Provision the company and its first Super Admin in one transaction.</p></div><form onSubmit={createCompany}><label>Company name<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required /></label><label>Company slug<input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label><label>Super Admin name<input value={adminName} onChange={(event) => setAdminName(event.target.value)} required /></label><label>Super Admin email<input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} required /></label><label>Temporary password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} minLength={10} required /></label><label>Confirm password<input type="password" value={adminPasswordConfirmation} onChange={(event) => setAdminPasswordConfirmation(event.target.value)} minLength={10} required /></label>{createError && <div className="form-error" role="alert">{createError}</div>}<button className="primary-button" type="submit">Provision company</button></form></section>}
+        {showCreate && !createdCompany && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">New tenant workspace</span><h2>Create company</h2><p>Provision the company and its first Super Admin in one transaction.</p></div><form onSubmit={createCompany} onInvalid={markFormSubmitted}><label>Company name<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required /></label><label>Company slug<input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label><label>Super Admin name<input value={adminName} onChange={(event) => setAdminName(event.target.value)} required /></label><label>Super Admin email<input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} required /></label><label>Temporary password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} minLength={10} required /></label><label>Confirm password<input type="password" value={adminPasswordConfirmation} onChange={(event) => setAdminPasswordConfirmation(event.target.value)} minLength={10} required /></label>{createError && <div className="form-error" role="alert">{createError}</div>}<button className="primary-button" type="submit">Provision company</button></form></section>}
         {createdCompany && <section className="login-panel onboarding-panel"><span className="panel-kicker">Provisioning complete</span><h2>{createdCompany.Name}</h2><p>Workspace <strong>{createdCompany.Slug}</strong> is ready. The initial Super Admin is {createdCompany.SuperAdminEmail}.</p><button className="quiet-button" onClick={() => { setCreatedCompany(null); setShowCreate(false); }}>Create another company</button></section>}
+        {permissions.includes('companies.manage') && <section className="company-list-section"><div className="section-heading"><div><span className="panel-kicker">Tenant directory</span><h2>Companies</h2></div><span className="company-count">{companies.length} total</span></div>{managementError && <div className="form-error" role="alert">{managementError}</div>}<div className="company-list">{companies.map((item) => <article className="company-row" key={item.id}><div><strong>{item.name}</strong><span>{item.slug}</span></div><span className={`status-badge ${item.status}`}>{item.status}</span><div className="company-actions"><button className="quiet-button" onClick={() => beginEdit(item)}>Edit</button>{item.status === 'active' && <button className="danger-button" onClick={() => suspendCompany(item.id)}>Suspend</button>}</div></article>)}</div></section>}
+        {editingCompany && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">Company details</span><h2>Edit {editingCompany.name}</h2></div><form onSubmit={updateCompany}><label>Company name<input value={editName} onChange={(event) => setEditName(event.target.value)} required /></label><label>Company slug<input value={editSlug} onChange={(event) => setEditSlug(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></label><div className="company-actions"><button className="primary-button" type="submit">Save changes</button><button className="quiet-button" type="button" onClick={() => setEditingCompany(null)}>Cancel</button></div></form></section>}
       </section>
     </main>
   );

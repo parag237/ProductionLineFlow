@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
@@ -141,6 +142,87 @@ func (h *PlatformHandler) CreateCompany(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, result)
+}
+
+func (h *PlatformHandler) ListCompanies(c *gin.Context) {
+	actor, ok := platformActor(c)
+	if !ok {
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+		return
+	}
+	companies, err := h.companyService.List(c.Request.Context(), actor)
+	if err != nil {
+		h.writeCompanyError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"companies": companies})
+}
+
+func (h *PlatformHandler) UpdateCompany(c *gin.Context) {
+	actor, ok := platformActor(c)
+	if !ok {
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_id", "Invalid company id")
+		return
+	}
+	var request struct {
+		Name string `json:"name" binding:"required"`
+		Slug string `json:"slug" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_request", "Invalid company request")
+		return
+	}
+	item, err := h.companyService.Update(c.Request.Context(), actor, id, company.UpdateInput{Name: request.Name, Slug: request.Slug})
+	if err != nil {
+		h.writeCompanyError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *PlatformHandler) SuspendCompany(c *gin.Context) {
+	actor, ok := platformActor(c)
+	if !ok {
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_id", "Invalid company id")
+		return
+	}
+	item, err := h.companyService.Suspend(c.Request.Context(), actor, id)
+	if err != nil {
+		h.writeCompanyError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+func platformActor(c *gin.Context) (rbac.PlatformActor, bool) {
+	value, ok := c.Get(constants.PlatformActorContextKey)
+	actor, valid := value.(rbac.PlatformActor)
+	return actor, ok && valid
+}
+
+func (h *PlatformHandler) writeCompanyError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, company.ErrForbidden):
+		writeError(c, http.StatusForbidden, "forbidden", "Platform permission required")
+	case errors.Is(err, company.ErrInvalidInput):
+		writeError(c, http.StatusBadRequest, "invalid_request", "Invalid company request")
+	case errors.Is(err, company.ErrNotFound):
+		writeError(c, http.StatusNotFound, "company_not_found", "Company not found")
+	case errors.Is(err, company.ErrDuplicateSlug):
+		writeError(c, http.StatusConflict, "duplicate_company_slug", "Company slug already exists")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to manage company")
+	}
 }
 
 func makePlatformSessionResponse(session auth.PlatformSession) platformSessionResponse {

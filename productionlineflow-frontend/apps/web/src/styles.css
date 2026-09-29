@@ -128,12 +128,12 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(59, 112, 93, 0.16);
 }
 
-input:user-invalid,
-input:invalid:not(:placeholder-shown) {
+form.form-submitted input:user-invalid,
+form.form-submitted input:invalid:not(:placeholder-shown) {
   border-color: #b64e43;
 }
 
-label:has(input:user-invalid)::after {
+form.form-submitted label:has(input:user-invalid)::after {
   color: #8b342d;
   font-weight: 700;
 }
@@ -302,6 +302,82 @@ label:has(input:user-invalid)::after {
   font-family: 'Trebuchet MS', sans-serif;
 }
 
+.company-list-section {
+  margin-top: 4rem;
+}
+
+.section-heading,
+.company-row,
+.company-actions {
+  display: flex;
+  align-items: center;
+}
+
+.section-heading,
+.company-row {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-heading h2 {
+  margin: 0.4rem 0 1rem;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.company-count,
+.company-row span,
+.status-badge {
+  color: #6d7c74;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.75rem;
+}
+
+.company-list {
+  border-top: 1px solid rgba(58, 83, 70, 0.2);
+}
+
+.company-row {
+  padding: 1rem 0;
+  border-bottom: 1px solid rgba(58, 83, 70, 0.16);
+}
+
+.company-row > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.company-row strong {
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
+.status-badge {
+  padding: 0.35rem 0.55rem;
+  color: #45685c;
+  background: #dce9df;
+  text-transform: uppercase;
+}
+
+.status-badge.suspended {
+  color: #8b342d;
+  background: #f7e2dc;
+}
+
+.company-actions {
+  gap: 0.5rem;
+}
+
+.danger-button {
+  padding: 0.6rem 0.8rem;
+  color: #8b342d;
+  background: transparent;
+  border: 1px solid #d18c82;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 700;
+}
+
 @media (max-width: 760px) {
   .auth-layout {
     grid-template-columns: 1fr;
@@ -329,5 +405,14 @@ label:has(input:user-invalid)::after {
   .workspace-grid {
     grid-template-columns: 1fr;
     margin-top: 2rem;
+  }
+
+  .company-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .company-row > div:first-child {
+    flex-basis: 70%;
   }
 }

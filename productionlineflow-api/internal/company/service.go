@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/constants"
@@ -16,6 +17,7 @@ var ErrInvalidInput = errors.New("invalid company onboarding input")
 var ErrDuplicateSlug = errors.New("company slug already exists")
 var ErrDuplicateAdminEmail = errors.New("initial super admin email already exists")
 var ErrForbidden = errors.New("platform actor cannot create companies")
+var ErrNotFound = errors.New("company not found")
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -36,8 +38,50 @@ type Result struct {
 	SuperAdminEmail string
 }
 
+type Company struct {
+	ID          int64      `json:"id"`
+	Slug        string     `json:"slug"`
+	Name        string     `json:"name"`
+	Status      string     `json:"status"`
+	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
+}
+
+type UpdateInput struct {
+	Name string
+	Slug string
+}
+
 type Repository interface {
 	CreateCompany(ctx context.Context, input Input, passwordHash string) (Result, error)
+	ListCompanies(ctx context.Context) ([]Company, error)
+	UpdateCompany(ctx context.Context, id int64, input UpdateInput) (Company, error)
+	SuspendCompany(ctx context.Context, id int64) (Company, error)
+}
+
+func (s *Service) List(ctx context.Context, actor rbac.PlatformActor) ([]Company, error) {
+	if !actor.Can(constants.PermissionCompaniesManage) {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListCompanies(ctx)
+}
+
+func (s *Service) Update(ctx context.Context, actor rbac.PlatformActor, id int64, input UpdateInput) (Company, error) {
+	if !actor.Can(constants.PermissionCompaniesManage) {
+		return Company{}, ErrForbidden
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	input.Slug = strings.TrimSpace(strings.ToLower(input.Slug))
+	if input.Name == "" || !slugPattern.MatchString(input.Slug) {
+		return Company{}, ErrInvalidInput
+	}
+	return s.repository.UpdateCompany(ctx, id, input)
+}
+
+func (s *Service) Suspend(ctx context.Context, actor rbac.PlatformActor, id int64) (Company, error) {
+	if !actor.Can(constants.PermissionCompaniesManage) {
+		return Company{}, ErrForbidden
+	}
+	return s.repository.SuspendCompany(ctx, id)
 }
 
 type Service struct {

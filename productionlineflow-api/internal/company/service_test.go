@@ -19,6 +19,10 @@ func (f *fakeRepository) CreateCompany(_ context.Context, _ Input, passwordHash 
 	return Result{ID: 1, Slug: "acme", Name: "Acme"}, nil
 }
 
+func (f *fakeRepository) ListCompanies(context.Context) ([]Company, error) { return nil, nil }
+func (f *fakeRepository) UpdateCompany(context.Context, int64, UpdateInput) (Company, error) { return Company{}, nil }
+func (f *fakeRepository) SuspendCompany(context.Context, int64) (Company, error) { return Company{}, nil }
+
 func TestCreateRequiresPlatformPermission(t *testing.T) {
 	repository := &fakeRepository{}
 	service := NewService(repository, 10)

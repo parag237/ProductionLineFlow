@@ -9,6 +9,7 @@ const (
 
 	PlatformRoleProductOwner  = "product_owner"
 	PermissionCompaniesCreate = "companies.create"
+	PermissionCompaniesManage = "companies.manage"
 
 	UserContextKey                = "auth.user"
 	PermissionsContextKey         = "auth.permissions"
