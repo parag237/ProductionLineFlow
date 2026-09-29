@@ -3,8 +3,9 @@ package server
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/config"
+
+	"github.com/gin-gonic/gin"
 )
 
 func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine {

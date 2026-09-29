@@ -8,8 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/argon2"
 	"productionlineflow-api/internal/constants"
+
+	"golang.org/x/crypto/argon2"
 )
 
 func HashPassword(password string) (string, error) {

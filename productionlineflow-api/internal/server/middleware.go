@@ -3,9 +3,10 @@ package server
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/constants"
+
+	"github.com/gin-gonic/gin"
 )
 
 func RequireTenantAuth(jwtService *auth.JWTService, repository auth.Repository) gin.HandlerFunc {
