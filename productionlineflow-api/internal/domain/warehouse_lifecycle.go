@@ -5,8 +5,8 @@ import (
 )
 
 var WarehouseLifecycle = fsm.Definition{
-	Type:    "warehouse_lifecycle",
-	Initial: "draft",
+	Type:     "warehouse_lifecycle",
+	Initial:  "draft",
 	Terminal: map[fsm.State]bool{"archived": true},
 	Transitions: []fsm.Transition{
 		{From: "draft", Event: "ACTIVATE", To: "active", Permission: "warehouses.manage"},

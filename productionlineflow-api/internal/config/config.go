@@ -82,6 +82,9 @@ func Load() (*Config, error) {
 	if c.Env != env {
 		return nil, fmt.Errorf("config env %q does not match APP_ENV %q", c.Env, env)
 	}
+	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
+		c.Database.DSN = dsn
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}

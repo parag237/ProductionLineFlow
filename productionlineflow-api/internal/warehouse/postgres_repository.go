@@ -28,7 +28,7 @@ func (r *PostgresRepository) List(ctx context.Context, companyID int64) ([]Wareh
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Warehouse
+	items := make([]Warehouse, 0)
 	for rows.Next() {
 		item, err := scanWarehouse(rows)
 		if err != nil {

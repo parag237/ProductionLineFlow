@@ -220,8 +220,8 @@ function WarehouseDashboard({ canManage, onBack }: { canManage: boolean; onBack:
   async function loadWarehouses() {
     setLoading(true);
     try {
-      const result = await request<{ warehouses: Warehouse[] }>('/warehouses');
-      setWarehouses(result.warehouses);
+      const result = await request<{ warehouses: Warehouse[] | null }>('/warehouses');
+      setWarehouses(result.warehouses ?? []);
     } catch (loadError) { setError((loadError as ApiError).message); }
     finally { setLoading(false); }
   }

@@ -7,8 +7,8 @@ import (
 )
 
 var WarehouseCreate = fsm.Definition{
-	Type:    "warehouse_create",
-	Initial: "details",
+	Type:     "warehouse_create",
+	Initial:  "details",
 	Terminal: map[fsm.State]bool{"done": true, "cancelled": true},
 	Transitions: []fsm.Transition{
 		{From: "details", Event: "SUBMIT_DETAILS", To: "review", Permission: "warehouses.manage"},
@@ -41,7 +41,7 @@ var WarehouseCreate = fsm.Definition{
 				Name:          "warehouse.create.review",
 				SchemaVersion: 1,
 				Title:         "Review warehouse",
-				Components: []ui.Component{{Type: "card", Text: "Review the warehouse details before creating it."}},
+				Components:    []ui.Component{{Type: "card", Text: "Review the warehouse details before creating it."}},
 				Actions: []ui.Action{
 					{ID: "back", Label: "Back", Event: "BACK", Style: "secondary"},
 					{ID: "confirm", Label: "Create warehouse", Event: "CONFIRM", Style: "primary"},
@@ -53,8 +53,8 @@ var WarehouseCreate = fsm.Definition{
 				Name:          "warehouse.create.done",
 				SchemaVersion: 1,
 				Title:         "Warehouse created",
-				Components: []ui.Component{{Type: "banner", Text: "The warehouse has been created."}},
-				Actions: []ui.Action{{ID: "done", Label: "Done", Event: "DONE", Style: "primary"}},
+				Components:    []ui.Component{{Type: "banner", Text: "The warehouse has been created."}},
+				Actions:       []ui.Action{{ID: "done", Label: "Done", Event: "DONE", Style: "primary"}},
 			}
 		},
 	},
