@@ -202,6 +202,21 @@ form.form-submitted label:has(input:user-invalid)::after {
   font-family: 'Trebuchet MS', sans-serif;
 }
 
+.company-header { position: sticky; top: 0; z-index: 500; min-height: 76px; padding-top: .8rem; padding-bottom: .8rem; background: rgb(250 252 250 / 96%); backdrop-filter: blur(12px); }
+.brand-block .eyebrow { display: block; }
+.header-controls { display: flex; align-items: center; gap: .75rem; }
+.profile-menu-wrap { position: relative; }
+.profile-trigger { display: flex; align-items: center; gap: .55rem; padding: .35rem .55rem; border: 1px solid #dce4df; border-radius: .65rem; color: #34463c; background: #fff; cursor: pointer; }
+.profile-avatar { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; color: #205c40; background: #e6f1ea; font-weight: 700; }
+.profile-name { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+.profile-menu { position: absolute; top: calc(100% + .5rem); right: 0; z-index: 510; display: grid; width: 230px; padding: .4rem; border: 1px solid #dfe7e2; border-radius: .7rem; background: #fff; box-shadow: 0 12px 36px rgb(14 28 20 / 16%); }
+.profile-menu-identity { display: grid; gap: .2rem; padding: .7rem .65rem; border-bottom: 1px solid #edf0ee; }
+.profile-menu-identity strong { color: #293a31; font-size: .85rem; }
+.profile-menu-identity span { overflow: hidden; color: #697970; font-size: .75rem; text-overflow: ellipsis; }
+.profile-menu > button { padding: .65rem; border: 0; border-radius: .4rem; color: #34463c; background: transparent; text-align: left; cursor: pointer; font-size: .82rem; }
+.profile-menu > button:hover { background: #f3f7f4; }
+.profile-menu > .profile-logout { color: #a33d35; }
+
 .topbar strong {
   display: block;
   margin-top: 0.25rem;
@@ -558,13 +573,23 @@ button, input, select { font: inherit; }
 .people-email { margin-top: .25rem; color: #697970; font-size: .82rem; }
 .people-table .assignment-list { margin: 0; }
 .muted-role { color: #75837b; font-size: .82rem; }
-.people-row-actions { display: flex; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; min-width: 290px; }
+.people-row-actions { display: flex; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; min-width: 190px; }
 .people-row-actions button { min-height: 2.2rem; margin: 0; padding: .42rem .65rem; border-radius: .45rem; font-size: .76rem; white-space: nowrap; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow-y: auto; padding: 1.25rem; background: rgb(18 31 25 / 48%); }
 .people-dialog { width: min(100%, 560px); max-height: min(88vh, 760px); overflow-y: auto; padding: 1.35rem; border: 1px solid #dfe7e2; border-radius: .9rem; background: #fff; box-shadow: 0 24px 80px rgb(14 28 20 / 24%); }
 .dialog-heading { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #edf0ee; }
 .dialog-heading h2 { margin: .25rem 0; color: #1b2923; font-size: 1.3rem; }
 .dialog-heading p { margin: .3rem 0 0; color: #68766f; font-size: .84rem; }
+.manage-dialog-tabs { display: flex; gap: .35rem; margin: 1rem 0 0; padding-bottom: .6rem; border-bottom: 1px solid #edf0ee; }
+.manage-dialog-tabs button { min-height: 2.25rem; padding: .45rem .8rem; border: 1px solid transparent; border-radius: .5rem; color: #56665d; background: transparent; font-size: .82rem; cursor: pointer; }
+.manage-dialog-tabs button[aria-selected="true"] { border-color: #d8e5dd; color: #205c40; background: #edf5f0; font-weight: 650; }
+.person-edit-form { display: grid; gap: .8rem; padding-top: 1rem; }
+.person-edit-form label { display: grid; gap: .35rem; color: #46564e; font-size: .8rem; }
+.person-edit-form input { width: 100%; min-height: 2.6rem; padding: .5rem .65rem; border: 1px solid #d3ddd7; border-radius: .5rem; background: #fff; font-size: .88rem; }
+.person-edit-form small { color: #6c7a72; font-size: .75rem; }
+.transfer-super-admin { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #edf0ee; }
+.transfer-super-admin h3 { margin: 0 0 .35rem; color: #34463c; font-size: .9rem; }
+.transfer-super-admin p { color: #68766f; font-size: .82rem; }
 .dialog-close { width: 2.25rem; height: 2.25rem; flex: 0 0 auto; padding: 0; border: 1px solid #dce4df; border-radius: .5rem; color: #47564e; background: #fff; font-size: 1.25rem; cursor: pointer; }
 .dialog-section { padding: 1rem 0; border-bottom: 1px solid #edf0ee; }
 .dialog-section h3 { margin: 0 0 .75rem; color: #34463c; font-size: .9rem; }
@@ -586,6 +611,9 @@ button, input, select { font: inherit; }
 .success-message { padding: .65rem .75rem; border-radius: .5rem; color: #27623b; background: #e7f4eb; font-size: .82rem; }
 
 @media (max-width: 760px) {
+  .company-header { min-height: 66px; padding-right: 1rem; padding-left: 1rem; }
+  .profile-name { max-width: 105px; }
+  .header-back { padding: .5rem; font-size: .75rem; }
   .people-toolbar { align-items: stretch; flex-direction: column; }
   .people-filters { align-items: stretch; flex-direction: column; }
   .people-filters input, .people-filters select, .people-filters button { width: 100%; }

@@ -424,6 +424,11 @@ func (r *PostgresRepository) TransferSuperAdmin(ctx context.Context, companyID, 
 	if _, err := tx.Exec(ctx, `INSERT INTO user_role_assignments(company_id,user_id,role_id) VALUES($1,$2,$3) ON CONFLICT (user_id,role_id) WHERE warehouse_id IS NULL DO NOTHING`, companyID, fromID, adminRoleID); err != nil {
 		return err
 	}
+	// Super Admin is the target's sole role after a transfer. Remove prior
+	// company and warehouse assignments in the same transaction.
+	if _, err := tx.Exec(ctx, `DELETE FROM user_role_assignments WHERE company_id=$1 AND user_id=$2`, companyID, toID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO user_role_assignments(company_id,user_id,role_id) VALUES($1,$2,$3) ON CONFLICT (user_id,role_id) WHERE warehouse_id IS NULL DO NOTHING`, companyID, toID, saRoleID); err != nil {
 		return err
 	}

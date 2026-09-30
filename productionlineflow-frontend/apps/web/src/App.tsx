@@ -6,6 +6,7 @@ import PeopleDashboard from './features/people/PeopleDashboard';
 import PlatformApp from './features/platform/PlatformApp';
 import WarehouseDashboard from './features/warehouses/WarehouseDashboard';
 import Workspace from './features/workspace/Workspace';
+import CompanyHeader from './shared/CompanyHeader';
 import { normalizePermissions } from './types';
 import type { MeResponse, Permissions, User } from './types';
 
@@ -62,7 +63,8 @@ export default function App() {
   if (!user) {
     return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(normalizePermissions(session.permissions)); }} />;
   }
-  if (showWarehouses) return <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} onBack={() => setShowWarehouses(false)} />;
-  if (showPeople) return <PeopleDashboard user={user} permissions={permissions} onBack={() => setShowPeople(false)} />;
-  return <Workspace user={user} permissions={permissions} onLogout={logout} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} />;
+  return <>
+    <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople ? () => { setShowWarehouses(false); setShowPeople(false); } : undefined} />
+    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} />}
+  </>;
 }

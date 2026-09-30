@@ -1,6 +1,6 @@
 import type { Permissions, User } from '../../types';
 
-export default function Workspace({ user, permissions, onLogout, onOpenWarehouses, onOpenPeople }: { user: User; permissions: Permissions; onLogout: () => void; onOpenWarehouses: () => void; onOpenPeople: () => void }) {
+export default function Workspace({ user, permissions, onOpenWarehouses, onOpenPeople }: { user: User; permissions: Permissions; onOpenWarehouses: () => void; onOpenPeople: () => void }) {
   const navigation = [
     { label: 'Warehouses', permission: 'warehouse.view' },
     { label: 'People & roles', permission: 'users.create' },
@@ -13,16 +13,6 @@ export default function Workspace({ user, permissions, onLogout, onOpenWarehouse
 
   return (
     <main className="workspace-shell">
-      <header className="topbar">
-        <div>
-          <span className="eyebrow">{user.company_slug}</span>
-          <strong>ProductionLineFlow</strong>
-        </div>
-        <div className="user-menu">
-          <span>{user.name}</span>
-          <button className="quiet-button" onClick={onLogout}>Sign out</button>
-        </div>
-      </header>
       <section className="workspace-content">
         <div className="workspace-heading">
           <div>
