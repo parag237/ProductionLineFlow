@@ -126,7 +126,6 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 			for _, allowedOrigin := range cfg.Server.AllowedOrigins {
 				if origin == allowedOrigin {
 					c.Header("Access-Control-Allow-Origin", origin)
-					c.Header("Access-Control-Allow-Credentials", "true")
 					c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Refresh-Token")
 					c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 					break

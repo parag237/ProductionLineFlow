@@ -547,6 +547,44 @@ button, input, select { font: inherit; }
 .people-workspace .empty-state { padding: 2rem; color: #6b7972; background: white; border: 1px dashed #d3ddd7; border-radius: .8rem; text-align: center; }
 .people-workspace .form-error { margin: 1rem 0; border-radius: .5rem; }
 
+.people-table-wrap { overflow-x: auto; border: 1px solid #e1e7e3; border-radius: .8rem; background: #fff; box-shadow: 0 2px 8px rgb(25 45 35 / 3%); }
+.people-table { width: 100%; border-collapse: collapse; text-align: left; }
+.people-table th { padding: .8rem 1rem; color: #65756c; background: #f7f9f8; border-bottom: 1px solid #e5ebe7; font-size: .73rem; font-weight: 650; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
+.people-table td { padding: .9rem 1rem; border-bottom: 1px solid #edf0ee; vertical-align: middle; }
+.people-table tbody tr:last-child td { border-bottom: 0; }
+.people-table tbody tr:hover { background: #fbfcfb; }
+.people-table td:first-child { min-width: 210px; }
+.people-table td:first-child strong, .people-email { display: block; }
+.people-email { margin-top: .25rem; color: #697970; font-size: .82rem; }
+.people-table .assignment-list { margin: 0; }
+.muted-role { color: #75837b; font-size: .82rem; }
+.people-row-actions { display: flex; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; min-width: 290px; }
+.people-row-actions button { min-height: 2.2rem; margin: 0; padding: .42rem .65rem; border-radius: .45rem; font-size: .76rem; white-space: nowrap; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow-y: auto; padding: 1.25rem; background: rgb(18 31 25 / 48%); }
+.people-dialog { width: min(100%, 560px); max-height: min(88vh, 760px); overflow-y: auto; padding: 1.35rem; border: 1px solid #dfe7e2; border-radius: .9rem; background: #fff; box-shadow: 0 24px 80px rgb(14 28 20 / 24%); }
+.dialog-heading { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #edf0ee; }
+.dialog-heading h2 { margin: .25rem 0; color: #1b2923; font-size: 1.3rem; }
+.dialog-heading p { margin: .3rem 0 0; color: #68766f; font-size: .84rem; }
+.dialog-close { width: 2.25rem; height: 2.25rem; flex: 0 0 auto; padding: 0; border: 1px solid #dce4df; border-radius: .5rem; color: #47564e; background: #fff; font-size: 1.25rem; cursor: pointer; }
+.dialog-section { padding: 1rem 0; border-bottom: 1px solid #edf0ee; }
+.dialog-section h3 { margin: 0 0 .75rem; color: #34463c; font-size: .9rem; }
+.dialog-role-list { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.dialog-role-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem .75rem; border: 1px solid #e7ece9; border-radius: .55rem; background: #fafcfb; }
+.dialog-role-list li strong, .dialog-role-list li small { display: block; }
+.dialog-role-list li strong { color: #304238; font-size: .85rem; }
+.dialog-role-list li small { margin-top: .2rem; color: #748178; font-size: .75rem; }
+.dialog-role-list li button { margin: 0; padding: .35rem .55rem; font-size: .75rem; }
+.role-assignment-form, .password-reset-form { display: grid; gap: .7rem; }
+.role-assignment-form label, .password-reset-form label { display: grid; gap: .35rem; color: #46564e; font-size: .8rem; }
+.role-assignment-form select, .password-reset-form input { width: 100%; min-height: 2.6rem; padding: .5rem .65rem; border: 1px solid #d3ddd7; border-radius: .5rem; background: #fff; font-size: .88rem; }
+.role-assignment-form .primary-button, .dialog-footer .primary-button { min-height: 2.45rem; margin: 0; padding: .55rem .85rem; border-radius: .5rem; font-size: .82rem; }
+.role-assignment-form .primary-button { justify-self: start; }
+.password-reset-form { padding-top: 1rem; }
+.password-reset-form > small { color: #6c7a72; font-size: .75rem; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: .55rem; padding-top: 1rem; }
+.dialog-footer button { min-height: 2.4rem; margin: 0; padding: .5rem .8rem; border-radius: .5rem; font-size: .8rem; }
+.success-message { padding: .65rem .75rem; border-radius: .5rem; color: #27623b; background: #e7f4eb; font-size: .82rem; }
+
 @media (max-width: 760px) {
   .people-toolbar { align-items: stretch; flex-direction: column; }
   .people-filters { align-items: stretch; flex-direction: column; }
@@ -555,6 +593,9 @@ button, input, select { font: inherit; }
   .people-actions { grid-column: 1; }
   .people-actions select { max-width: none; }
   .permission-options { grid-template-columns: 1fr; }
+  .people-table { min-width: 760px; }
+  .people-row-actions { justify-content: flex-start; }
+  .people-dialog { padding: 1rem; }
 }
 
 @media (max-width: 760px) {

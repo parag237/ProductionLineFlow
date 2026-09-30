@@ -13,8 +13,23 @@ type Permissions = {
   warehouses: Record<string, string[]>;
 };
 
+function normalizePermissions(value: Partial<Permissions> | null | undefined): Permissions {
+  const warehouses = value?.warehouses;
+  const normalizedWarehouses: Record<string, string[]> = {};
+  if (warehouses && typeof warehouses === 'object' && !Array.isArray(warehouses)) {
+    for (const [warehouseID, list] of Object.entries(warehouses)) {
+      if (Array.isArray(list)) normalizedWarehouses[warehouseID] = list.filter((permission): permission is string => typeof permission === 'string');
+    }
+  }
+  return {
+    company: Array.isArray(value?.company) ? value.company.filter((permission): permission is string => typeof permission === 'string') : [],
+    warehouses: normalizedWarehouses,
+  };
+}
+
 type SessionResponse = {
   access_token: string;
+  refresh_token: string;
   session_id: string;
   expires_in: number;
   idle_timeout_seconds: number;
@@ -38,6 +53,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api
 
 let accessToken = '';
 let platformAccessToken = '';
+let tenantRefreshToken = '';
+let platformRefreshToken = '';
 let tenantSessionID = '';
 let platformSessionID = '';
 let tenantIdleTimeout = 0;
@@ -46,6 +63,24 @@ let tenantIdleTimer: number | undefined;
 let platformIdleTimer: number | undefined;
 let tenantRefreshPromise: Promise<SessionResponse> | null = null;
 let platformRefreshPromise: Promise<PlatformSession> | null = null;
+
+const tenantRefreshStorageKey = 'productionlineflow:tenant:refresh-token';
+const platformRefreshStorageKey = 'productionlineflow:platform:refresh-token';
+
+function loadRefreshToken(platform: boolean) {
+  try { return sessionStorage.getItem(platform ? platformRefreshStorageKey : tenantRefreshStorageKey) ?? ''; }
+  catch { return ''; }
+}
+
+function saveRefreshToken(platform: boolean, token: string) {
+  if (platform) platformRefreshToken = token;
+  else tenantRefreshToken = token;
+  try {
+    const key = platform ? platformRefreshStorageKey : tenantRefreshStorageKey;
+    if (token) sessionStorage.setItem(key, token);
+    else sessionStorage.removeItem(key);
+  } catch { /* session storage may be disabled; the current tab can still use memory */ }
+}
 
 function idleStorageKey(platform: boolean, sessionID: string, suffix: string) {
   return `productionlineflow:${platform ? 'platform' : 'tenant'}:${sessionID}:${suffix}`;
@@ -87,8 +122,8 @@ function endIdleSession(platform: boolean) {
   const timer = platform ? platformIdleTimer : tenantIdleTimer;
   if (timer !== undefined) window.clearTimeout(timer);
   try { if (sessionID) localStorage.setItem(idleStorageKey(platform, sessionID, 'ended'), String(Date.now())); } catch { /* browser storage may be disabled */ }
-  if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; }
-  else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; }
+  if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; saveRefreshToken(true, ''); }
+  else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; saveRefreshToken(false, ''); }
 }
 
 window.addEventListener('storage', (event) => {
@@ -109,11 +144,15 @@ function redirectToLogin(platform = false, broadcast = true) {
   else {
     const timer = platform ? platformIdleTimer : tenantIdleTimer;
     if (timer !== undefined) window.clearTimeout(timer);
-    if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; }
-    else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; }
+	if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; saveRefreshToken(true, ''); }
+	else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; saveRefreshToken(false, ''); }
   }
   const loginPath = platform ? '/platform/login' : '/login';
   if (window.location.pathname !== loginPath) window.location.replace(loginPath);
+}
+
+function isLoginRoute(platform = false) {
+  return window.location.pathname === (platform ? '/platform/login' : '/login');
 }
 
 function markFormSubmitted(event: FormEvent<HTMLFormElement>) {
@@ -144,12 +183,16 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
+	if (path === '/auth/refresh' || path === '/auth/logout') {
+		const refreshToken = tenantRefreshToken || loadRefreshToken(false);
+		if (refreshToken) headers.set('X-Refresh-Token', refreshToken);
+	}
 	if (accessToken && !path.startsWith('/auth/')) recordSessionActivity(false);
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers,
-    credentials: 'include',
+    credentials: 'omit',
   });
 
   if (response.status === 401 && retry && path !== '/auth/refresh' && path !== '/auth/login') {
@@ -159,6 +202,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
       return request<T>(path, init, false);
     } catch {
       accessToken = '';
+      saveRefreshToken(false, '');
       redirectToLogin(false);
     }
   }
@@ -177,20 +221,28 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     return undefined as T;
   }
   const result = await response.json() as T;
-  if (path === '/auth/login' || path === '/auth/refresh') startIdleSession(false, result as SessionResponse);
+  if (path === '/auth/login' || path === '/auth/refresh') {
+    const session = result as SessionResponse;
+    saveRefreshToken(false, session.refresh_token);
+    startIdleSession(false, session);
+  }
   return result;
 }
 
 type PlatformUser = { id: number; name: string; email: string };
-type PlatformSession = { access_token: string; session_id: string; expires_in: number; idle_timeout_seconds: number; user: PlatformUser; permissions: string[] };
+type PlatformSession = { access_token: string; refresh_token: string; session_id: string; expires_in: number; idle_timeout_seconds: number; user: PlatformUser; permissions: string[] };
 type PlatformCompany = { id: number; slug: string; name: string; status: 'active' | 'suspended'; suspended_at?: string; activated_at?: string };
 
 async function platformRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
   if (platformAccessToken) headers.set('Authorization', `Bearer ${platformAccessToken}`);
+	if (path === '/auth/refresh' || path === '/auth/logout') {
+		const refreshToken = platformRefreshToken || loadRefreshToken(true);
+		if (refreshToken) headers.set('X-Refresh-Token', refreshToken);
+	}
 	if (platformAccessToken && !path.startsWith('/auth/')) recordSessionActivity(true);
-  const response = await fetch(`${API_BASE}/platform${path}`, { ...init, headers, credentials: 'include' });
+  const response = await fetch(`${API_BASE}/platform${path}`, { ...init, headers, credentials: 'omit' });
   if (response.status === 401 && retry && path !== '/auth/refresh' && path !== '/auth/login') {
     try {
       const refreshed = await refreshPlatformSession();
@@ -198,6 +250,7 @@ async function platformRequest<T>(path: string, init: RequestInit = {}, retry = 
       return platformRequest<T>(path, init, false);
     } catch {
       platformAccessToken = '';
+      saveRefreshToken(true, '');
       redirectToLogin(true);
     }
   }
@@ -211,7 +264,11 @@ async function platformRequest<T>(path: string, init: RequestInit = {}, retry = 
   }
   if (response.status === 204) return undefined as T;
   const result = await response.json() as T;
-  if (path === '/auth/login' || path === '/auth/refresh') startIdleSession(true, result as PlatformSession);
+  if (path === '/auth/login' || path === '/auth/refresh') {
+    const session = result as PlatformSession;
+    saveRefreshToken(true, session.refresh_token);
+    startIdleSession(true, session);
+  }
   return result;
 }
 
@@ -283,7 +340,11 @@ function Workspace({ user, permissions, onLogout, onOpenWarehouses, onOpenPeople
     { label: 'Warehouses', permission: 'warehouse.view' },
     { label: 'People & roles', permission: 'users.create' },
     { label: 'Operations', permission: 'workers.tasks.execute' },
-  ].filter((item) => item.label === 'People & roles' ? permissions.company.includes('users.create') || Object.values(permissions.warehouses).some((list) => list.includes('warehouse.members.manage')) : permissions.company.includes(item.permission));
+  ].filter((item) => {
+    if (item.label === 'People & roles') return permissions.company.includes('users.create') || Object.values(permissions.warehouses).some((list) => list.includes('warehouse.members.manage'));
+    if (item.permission === 'warehouse.view') return permissions.company.includes(item.permission) || Object.values(permissions.warehouses).some((list) => list.includes(item.permission));
+    return permissions.company.includes(item.permission);
+  });
 
   return (
     <main className="workspace-shell">
@@ -334,6 +395,8 @@ function PeopleDashboard({ user, permissions, onBack }: { user: User; permission
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('active');
   const [tab, setTab] = useState<'people' | 'roles'>('people');
+  const [managingRolesFor, setManagingRolesFor] = useState<Person | null>(null);
+  const [roleDialogError, setRoleDialogError] = useState('');
   const [editing, setEditing] = useState<Person | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
@@ -363,8 +426,11 @@ function PeopleDashboard({ user, permissions, onBack }: { user: User; permission
     try {
       if (editing) await request(`/users/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, email }) });
       else {
-        const assignments = roleID ? [{ role_id: Number(roleID), warehouse_id: roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' ? Number(warehouseID) : null }] : [];
-        await request('/users', { method: 'POST', body: JSON.stringify({ name, email, password, assignments }) });
+        const created = await request<Person>('/users', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+        setShowForm(false);
+        await load();
+        setManagingRolesFor(created);
+        return;
       }
       setShowForm(false); await load();
     } catch (e) { setError((e as ApiError).message); }
@@ -376,11 +442,11 @@ function PeopleDashboard({ user, permissions, onBack }: { user: User; permission
   async function addAssignment(person: Person) {
     if (!roleID) return;
     const role = roles.find((r) => r.id === Number(roleID)); if (!role) return;
-    try { await request(`/users/${person.id}/role-assignments`, { method: 'POST', body: JSON.stringify({ role_id: role.id, warehouse_id: role.scope === 'warehouse' ? Number(warehouseID) : null }) }); setRoleID(''); setWarehouseID(''); await load(); }
-    catch (e) { setError((e as ApiError).message); }
+    try { await request(`/users/${person.id}/role-assignments`, { method: 'POST', body: JSON.stringify({ role_id: role.id, warehouse_id: role.scope === 'warehouse' ? Number(warehouseID) : null }) }); setRoleID(''); setWarehouseID(''); setRoleDialogError(''); await load(); }
+    catch (e) { setRoleDialogError((e as ApiError).message); }
   }
   async function removeAssignment(person: Person, assignment: Assignment) {
-    try { await request(`/users/${person.id}/role-assignments/${assignment.id}`, { method: 'DELETE' }); await load(); } catch (e) { setError((e as ApiError).message); }
+    try { await request(`/users/${person.id}/role-assignments/${assignment.id}`, { method: 'DELETE' }); setRoleDialogError(''); await load(); } catch (e) { setRoleDialogError((e as ApiError).message); }
   }
   async function saveRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
@@ -391,17 +457,46 @@ function PeopleDashboard({ user, permissions, onBack }: { user: User; permission
     } catch (e) { setError((e as ApiError).message); }
   }
   async function removeRole(role: Role) { try { await request(`/roles/${role.id}`, { method: 'DELETE' }); await load(); } catch (e) { setError((e as ApiError).message); } }
+  const roleModalPerson = managingRolesFor ? people.find((person) => person.id === managingRolesFor.id) ?? managingRolesFor : null;
   return <main className="workspace-shell"><header className="topbar"><div><span className="eyebrow">{user.company_slug}</span><strong>ProductionLineFlow</strong></div><button className="quiet-button" onClick={onBack}>← Overview</button></header><section className="workspace-content people-workspace"><div className="workspace-heading"><div><span className="panel-kicker">Company workspace</span><h1>People & roles</h1><p>Manage company access and warehouse memberships.</p></div></div>
     <div className="people-toolbar"><div className="people-tabs"><button className={tab === 'people' ? 'primary-button' : 'quiet-button'} onClick={() => setTab('people')}>People</button>{canSeeRoles && <button className={tab === 'roles' ? 'primary-button' : 'quiet-button'} onClick={() => setTab('roles')}>Roles</button>}</div>{tab === 'people' && <div className="people-filters"><input aria-label="Search people" placeholder="Search name or email" value={query} onChange={(e) => setQuery(e.target.value)} /><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All statuses</option></select>{(canManageCompany || managedWarehouseIds.length > 0) && <button className="primary-button" onClick={createPerson}>Add person</button>}</div>}</div>
     {error && <div className="form-error" role="alert">{error}</div>}
-    {tab === 'people' && showForm && <form className="people-form" onSubmit={savePerson}><h2>{editing ? 'Edit person' : 'Add person'}</h2><label>Name<input required value={name} onChange={(e) => setName(e.target.value)} /></label><label>Company email<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>{!editing && <><label>Initial password<input type="password" minLength={10} required value={password} onChange={(e) => setPassword(e.target.value)} /><small>Use at least 10 characters.</small></label><label>Role<select value={roleID} onChange={(e) => setRoleID(e.target.value)} required><option value="">Choose a role</option>{allowedRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>{roleID && roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && <label>Warehouse<select required value={warehouseID} onChange={(e) => setWarehouseID(e.target.value)}><option value="">Choose a warehouse</option>{availableWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}</>}<div className="people-actions"><button className="primary-button" type="submit">Save</button><button className="quiet-button" type="button" onClick={() => setShowForm(false)}>Cancel</button></div></form>}
-    {loading ? <div className="empty-state">Loading people and roles…</div> : tab === 'people' ? people.length === 0 ? <div className="empty-state">No people match this filter.</div> : <div className="people-list">{people.map((person) => { const isManager = !canManageCompany; return <article className="people-card" key={person.id}><div className="people-person"><div><h2>{person.name}</h2><p>{person.email}</p></div><span className={person.is_active ? 'people-status active' : 'people-status'}>{person.is_active ? 'Active' : 'Inactive'}</span></div><div className="assignment-list">{person.assignments.map((assignment) => <span className="assignment-chip" key={assignment.id}>{assignment.role_name}{assignment.warehouse_name ? ` · ${assignment.warehouse_name}` : ''}{(canManageAdmins || (isManager && assignment.role_slug === 'worker' && managedWarehouseIds.includes(assignment.warehouse_id ?? -1))) && assignment.role_slug !== 'super_admin' && <button aria-label={`Remove ${assignment.role_name} assignment`} onClick={() => void removeAssignment(person, assignment)}>×</button>}</span>)}</div>{allowedRoles.length > 0 && person.is_active && <div className="people-actions"><select aria-label="Role to assign" value={roleID} onChange={(e) => setRoleID(e.target.value)}><option value="">Add assignment…</option>{allowedRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select>{roleID && roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && <select aria-label="Assignment warehouse" value={warehouseID} onChange={(e) => setWarehouseID(e.target.value)}><option value="">Choose warehouse</option>{availableWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}<button className="quiet-button" disabled={!roleID || (roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && !warehouseID)} onClick={() => void addAssignment(person)}>Assign role</button></div>}{!isManager && <div className="people-actions"><button className="quiet-button" onClick={() => editPerson(person)}>Edit</button><button className="quiet-button" onClick={() => void deactivate(person)}>{person.is_active ? 'Deactivate' : 'Reactivate'}</button>{canManageCompany && <PasswordReset person={person} />}{canManageAdmins && person.is_active && !person.assignments.some((a) => a.role_slug === 'super_admin') && <button className="quiet-button" onClick={async () => { if (confirm(`Transfer Super Admin to ${person.name}?`)) { try { await request(`/users/${person.id}/transfer-super-admin`, { method: 'POST' }); await load(); } catch (e) { setError((e as ApiError).message); } } }}>Transfer Super Admin</button>}</div>}</article>; })}</div> : <><form className="people-form" onSubmit={saveRole}><h2>{editingRole ? 'Edit custom role' : 'Create custom role'}</h2><label>Role name<input required value={roleName} onChange={(e) => setRoleName(e.target.value)} /></label>{!editingRole && <label>Scope<select value={roleScope} onChange={(e) => setRoleScope(e.target.value)}><option value="warehouse">Warehouse</option><option value="company">Company</option></select></label>}<fieldset><legend>Permissions</legend><div className="permission-options">{catalog.map((permission) => <label key={permission.key}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(e) => setSelectedPermissions(e.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((p) => p !== permission.key))} />{permission.description || permission.key}</label>)}</div></fieldset><div className="people-actions"><button className="primary-button" disabled={selectedPermissions.length === 0}>Save role</button>{editingRole && <button type="button" className="quiet-button" onClick={() => { setEditingRole(null); setRoleName(''); setSelectedPermissions([]); }}>Cancel</button>}</div></form><div className="people-list">{roles.map((role) => <article className="people-card" key={role.id}><div className="people-person"><h2>{role.name}</h2><span>{role.scope} · {role.is_system ? 'System role' : 'Custom role'}</span></div><p>{role.permissions.join(', ')}</p>{!role.is_system && <div className="people-actions"><button className="quiet-button" onClick={() => { setEditingRole(role); setRoleName(role.name); setSelectedPermissions(role.permissions); }}>Edit</button><button className="quiet-button" onClick={() => void removeRole(role)}>Delete</button></div>}</article>)}</div></>}
+    {tab === 'people' && showForm && <form className="people-form" onSubmit={savePerson}><h2>{editing ? 'Edit person' : 'Add person'}</h2><label>Name<input required value={name} onChange={(e) => setName(e.target.value)} /></label><label>Company email<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>{!editing && <label>Initial password<input type="password" minLength={10} required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /><small>Use at least 10 characters.</small></label>}<div className="people-actions"><button className="primary-button" type="submit">Save</button><button className="quiet-button" type="button" onClick={() => setShowForm(false)}>Cancel</button></div></form>}
+    {loading ? <div className="empty-state">Loading people and roles…</div> : tab === 'people' ? people.length === 0 ? <div className="empty-state">No people match this filter.</div> : <div className="people-table-wrap"><table className="people-table"><thead><tr><th scope="col">Person</th><th scope="col">Current roles</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{people.map((person) => { const isManager = !canManageCompany; return <tr key={person.id}><td data-label="Person"><strong>{person.name}</strong><span className="people-email">{person.email}</span></td><td data-label="Current roles"><div className="assignment-list">{(person.assignments ?? []).length ? person.assignments.map((assignment) => <span className="assignment-chip" key={assignment.id}>{assignment.role_name}{assignment.warehouse_name ? ` · ${assignment.warehouse_name}` : ''}</span>) : <span className="muted-role">No roles assigned</span>}</div></td><td data-label="Status"><span className={person.is_active ? 'people-status active' : 'people-status'}>{person.is_active ? 'Active' : 'Inactive'}</span></td><td data-label="Actions"><div className="people-row-actions">{(allowedRoles.length > 0 || canManageAdmins) && person.is_active && <button className="quiet-button" onClick={() => { setManagingRolesFor(person); setRoleID(''); setWarehouseID(''); }}>Manage Role</button>}{canManageCompany && <PasswordReset person={person} />}{!isManager && <><button className="quiet-button" onClick={() => editPerson(person)}>Edit</button><button className={person.is_active ? 'quiet-button' : 'primary-button'} onClick={() => void deactivate(person)}>{person.is_active ? 'Deactivate' : 'Reactivate'}</button>{canManageAdmins && person.is_active && !(person.assignments ?? []).some((a) => a.role_slug === 'super_admin') && <button className="quiet-button" onClick={async () => { if (confirm(`Transfer Super Admin to ${person.name}?`)) { try { await request(`/users/${person.id}/transfer-super-admin`, { method: 'POST' }); await load(); } catch (e) { setError((e as ApiError).message); } } }}>Transfer Super Admin</button>}</>}</div></td></tr>; })}</tbody></table></div> : <><form className="people-form" onSubmit={saveRole}><h2>{editingRole ? 'Edit custom role' : 'Create custom role'}</h2><label>Role name<input required value={roleName} onChange={(e) => setRoleName(e.target.value)} /></label>{!editingRole && <label>Scope<select value={roleScope} onChange={(e) => setRoleScope(e.target.value)}><option value="warehouse">Warehouse</option><option value="company">Company</option></select></label>}<fieldset><legend>Permissions</legend><div className="permission-options">{catalog.map((permission) => <label key={permission.key}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(e) => setSelectedPermissions(e.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((p) => p !== permission.key))} />{permission.description || permission.key}</label>)}</div></fieldset><div className="people-actions"><button className="primary-button" disabled={selectedPermissions.length === 0}>Save role</button>{editingRole && <button type="button" className="quiet-button" onClick={() => { setEditingRole(null); setRoleName(''); setSelectedPermissions([]); }}>Cancel</button>}</div></form><div className="people-list">{roles.map((role) => <article className="people-card" key={role.id}><div className="people-person"><h2>{role.name}</h2><span>{role.scope} · {role.is_system ? 'System role' : 'Custom role'}</span></div><p>{role.permissions.join(', ')}</p>{!role.is_system && <div className="people-actions"><button className="quiet-button" onClick={() => { setEditingRole(role); setRoleName(role.name); setSelectedPermissions(role.permissions); }}>Edit</button><button className="quiet-button" onClick={() => void removeRole(role)}>Delete</button></div>}</article>)}</div></>}
+    {roleModalPerson && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setManagingRolesFor(null); }}><section className="people-dialog" role="dialog" aria-modal="true" aria-labelledby="manage-role-title"><div className="dialog-heading"><div><span className="panel-kicker">Person access</span><h2 id="manage-role-title">Manage roles</h2><p>{roleModalPerson.name} · {roleModalPerson.email}</p></div><button className="dialog-close" aria-label="Close manage roles" onClick={() => setManagingRolesFor(null)}>×</button></div><div className="dialog-section"><h3>Current roles</h3>{(roleModalPerson.assignments ?? []).length === 0 ? <p className="muted-role">No roles assigned yet.</p> : <ul className="dialog-role-list">{roleModalPerson.assignments.map((assignment) => <li key={assignment.id}><span><strong>{assignment.role_name}</strong>{assignment.warehouse_name && <small>{assignment.warehouse_name}</small>}</span>{assignment.role_slug !== 'super_admin' && (canManageAdmins || (!canManageCompany && assignment.role_slug === 'worker' && managedWarehouseIds.includes(assignment.warehouse_id ?? -1))) && <button className="quiet-button" onClick={() => void removeAssignment(roleModalPerson, assignment)}>Remove</button>}</li>)}</ul>}</div>{allowedRoles.length > 0 && roleModalPerson.is_active && <div className="dialog-section"><h3>Assign a role</h3><div className="role-assignment-form"><label>Role<select value={roleID} onChange={(event) => { setRoleID(event.target.value); setWarehouseID(''); }}><option value="">Choose a role</option>{allowedRoles.map((role) => <option key={role.id} value={role.id}>{role.name} · {role.scope}</option>)}</select></label>{roleID && roles.find((role) => role.id === Number(roleID))?.scope === 'warehouse' && <label>Warehouse<select value={warehouseID} onChange={(event) => setWarehouseID(event.target.value)}><option value="">Choose a warehouse</option>{availableWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}<button className="primary-button" disabled={!roleID || (roles.find((role) => role.id === Number(roleID))?.scope === 'warehouse' && !warehouseID)} onClick={() => void addAssignment(roleModalPerson)}>Assign role</button></div>{roleDialogError && <div className="form-error" role="alert">{roleDialogError}</div>}</div>}<div className="dialog-footer"><button className="quiet-button" onClick={() => setManagingRolesFor(null)}>Done</button></div></section></div>}
   </section></main>;
 }
 
 function PasswordReset({ person }: { person: Person }) {
-  const [password, setPassword] = useState(''); const [message, setMessage] = useState('');
-  return <form className="inline-password" onSubmit={async (event) => { event.preventDefault(); try { await request(`/users/${person.id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) }); setPassword(''); setMessage('Password updated'); } catch (e) { setMessage((e as ApiError).message); } }}><input type="password" minLength={8} required placeholder="New password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="quiet-button">Reset password</button>{message && <small>{message}</small>}</form>;
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function resetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage('');
+    setError('');
+    if (password !== confirmation) {
+      setError('The passwords do not match.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await request(`/users/${person.id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) });
+      setPassword('');
+      setConfirmation('');
+      setMessage('Password reset successfully.');
+    } catch (resetError) {
+      setError((resetError as ApiError).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <><button className="quiet-button" onClick={() => { setError(''); setMessage(''); setOpen(true); }}>Manage Password</button>{open && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) setOpen(false); }}><section className="people-dialog" role="dialog" aria-modal="true" aria-labelledby={`password-reset-title-${person.id}`}><div className="dialog-heading"><div><span className="panel-kicker">Account security</span><h2 id={`password-reset-title-${person.id}`}>Manage password</h2><p>Set a new password for {person.name}.</p></div><button className="dialog-close" aria-label="Close manage password" disabled={saving} onClick={() => setOpen(false)}>×</button></div><form className="password-reset-form" onSubmit={resetPassword}><label>New Password<input type="password" autoComplete="new-password" minLength={10} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><label>Confirm Password<input type="password" autoComplete="new-password" minLength={10} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label><small>Use at least 10 characters.</small>{error && <div className="form-error" role="alert">{error}</div>}{message && <div className="success-message" role="status">{message}</div>}<div className="dialog-footer"><button className="quiet-button" type="button" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="primary-button" type="submit" disabled={saving}>{saving ? 'Resetting…' : 'Reset Password'}</button></div></form></section></div>}</>;
 }
 
 function WarehouseDashboard({ canManage, onBack }: { canManage: boolean; onBack: () => void }) {
@@ -622,6 +717,14 @@ function PlatformApp() {
 
   useEffect(() => {
     let active = true;
+    // Do not try to restore an old session while already on the login screen.
+    // Besides being unnecessary, a rejected stale token can otherwise redirect
+    // back to this exact URL repeatedly in some browsers.
+    if (isLoginRoute(true)) {
+      saveRefreshToken(true, '');
+      setLoading(false);
+      return () => { active = false; };
+    }
     refreshPlatformSession()
       .then((session) => { platformAccessToken = session.access_token; if (active) { setUser(session.user); setPermissions(session.permissions); } })
       .catch(() => { platformAccessToken = ''; if (active) redirectToLogin(true); })
@@ -651,6 +754,13 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    if (isLoginRoute(false)) {
+      saveRefreshToken(false, '');
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     refreshTenantSession()
       .then((session) => {
         accessToken = session.access_token;
@@ -659,7 +769,7 @@ export default function App() {
       .then((me) => {
         if (active) {
           setUser(me.user);
-          setPermissions(me.permissions);
+          setPermissions(normalizePermissions(me.permissions));
         }
       })
       .catch(() => {
@@ -685,7 +795,7 @@ export default function App() {
     return <main className="loading-screen"><span className="loading-dot" />Restoring your session...</main>;
   }
   if (!user) {
-    return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(session.permissions); }} />;
+    return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(normalizePermissions(session.permissions)); }} />;
   }
   if (showWarehouses) return <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} onBack={() => setShowWarehouses(false)} />;
   if (showPeople) return <PeopleDashboard user={user} permissions={permissions} onBack={() => setShowPeople(false)} />;

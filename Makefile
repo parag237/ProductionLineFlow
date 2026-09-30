@@ -1,4 +1,4 @@
-.PHONY: help setup docker-start infra infra-down migrate dev backend frontend logs
+.PHONY: help setup docker-start infra infra-down migrate db dev backend frontend logs
 
 API_DIR := productionlineflow-api
 FRONTEND_DIR := productionlineflow-frontend
@@ -10,6 +10,7 @@ help:
 	@echo "  make infra     Start local PostgreSQL and Redis with Docker Compose"
 	@echo "  make infra-down Stop local PostgreSQL and Redis"
 	@echo "  make migrate   Apply database migrations and development seed data"
+	@echo "  make db        Open an interactive PostgreSQL shell"
 	@echo "  make dev       Run backend and web frontend together"
 	@echo "  make backend   Run the backend API"
 	@echo "  make logs      Follow backend API logs"
@@ -74,6 +75,10 @@ migrate: infra
 	echo "Applying development seed data (platform account parag@platform.test)"; \
 	$$compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d warehouse_dev \
 		< $(API_DIR)/db/seeds/dev.sql
+
+db: docker-start
+	docker compose -f $(API_DIR)/docker-compose.yml up -d --wait postgres
+	docker compose -f $(API_DIR)/docker-compose.yml exec postgres psql -U app -d warehouse_dev
 
 backend:
 	docker compose -f $(API_DIR)/docker-compose.yml up --build api

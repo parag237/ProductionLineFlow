@@ -30,13 +30,14 @@ type platformLoginRequest struct {
 }
 
 type platformSessionResponse struct {
-	AccessToken string               `json:"access_token"`
-	SessionID   string               `json:"session_id"`
-	TokenType   string               `json:"token_type"`
-	ExpiresIn   int                  `json:"expires_in"`
-	IdleTimeout int                  `json:"idle_timeout_seconds"`
-	User        platformUserResponse `json:"user"`
-	Permissions []string             `json:"permissions"`
+	AccessToken  string               `json:"access_token"`
+	RefreshToken string               `json:"refresh_token"`
+	SessionID    string               `json:"session_id"`
+	TokenType    string               `json:"token_type"`
+	ExpiresIn    int                  `json:"expires_in"`
+	IdleTimeout  int                  `json:"idle_timeout_seconds"`
+	User         platformUserResponse `json:"user"`
+	Permissions  []string             `json:"permissions"`
 }
 
 type platformUserResponse struct {
@@ -61,15 +62,13 @@ func (h *PlatformHandler) Login(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
-	h.setRefreshCookie(c, session.RefreshToken, int(h.service.RefreshTTL().Seconds()))
 	c.JSON(http.StatusOK, makePlatformSessionResponse(session))
 }
 
 func (h *PlatformHandler) Refresh(c *gin.Context) {
-	rawToken, _ := c.Cookie(constants.PlatformRefreshCookieName)
+	rawToken := c.GetHeader("X-Refresh-Token")
 	session, err := h.service.Refresh(c.Request.Context(), rawToken, c.GetHeader("User-Agent"))
 	if err != nil {
-		clearRefreshCookie(c, constants.PlatformRefreshCookieName, h.secureCookie, "/api/v1/platform/auth")
 		code := "invalid_platform_refresh_token"
 		if errors.Is(err, auth.ErrPlatformRefreshReused) {
 			code = "platform_refresh_token_reused"
@@ -77,18 +76,16 @@ func (h *PlatformHandler) Refresh(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, code, "Platform session expired")
 		return
 	}
-	h.setRefreshCookie(c, session.RefreshToken, int(h.service.RefreshTTL().Seconds()))
 	c.JSON(http.StatusOK, makePlatformSessionResponse(session))
 }
 
 func (h *PlatformHandler) Logout(c *gin.Context) {
-	rawToken, _ := c.Cookie(constants.PlatformRefreshCookieName)
+	rawToken := c.GetHeader("X-Refresh-Token")
 	if err := h.service.Logout(c.Request.Context(), rawToken); err != nil {
 		logInternalError(c, "platform sign out", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign out")
 		return
 	}
-	h.setRefreshCookie(c, "", -1)
 	c.Status(http.StatusNoContent)
 }
 
@@ -253,17 +250,11 @@ func (h *PlatformHandler) writeCompanyError(c *gin.Context, err error) {
 }
 
 func makePlatformSessionResponse(session auth.PlatformSession) platformSessionResponse {
-	return platformSessionResponse{AccessToken: session.AccessToken, SessionID: session.SessionID, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, IdleTimeout: session.IdleTimeout, User: makePlatformUserResponse(session.User), Permissions: session.Permissions}
+	return platformSessionResponse{AccessToken: session.AccessToken, RefreshToken: session.RefreshToken, SessionID: session.SessionID, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, IdleTimeout: session.IdleTimeout, User: makePlatformUserResponse(session.User), Permissions: session.Permissions}
 }
 
 func makePlatformUserResponse(user auth.PlatformUser) platformUserResponse {
 	return platformUserResponse{ID: user.ID, Name: user.Name, Email: user.Email}
-}
-
-func (h *PlatformHandler) setRefreshCookie(c *gin.Context, token string, maxAge int) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(constants.PlatformRefreshCookieName, token, maxAge, "/api/v1", "", h.secureCookie, true)
-	c.SetCookie(constants.PlatformRefreshCookieName, "", -1, "/api/v1/platform/auth", "", h.secureCookie, true)
 }
 
 func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRepository, idleTimeout time.Duration, secureCookie bool) gin.HandlerFunc {

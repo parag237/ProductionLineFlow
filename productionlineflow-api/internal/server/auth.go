@@ -52,13 +52,14 @@ type eventlessUser struct {
 }
 
 type sessionResponse struct {
-	AccessToken string             `json:"access_token"`
-	SessionID   string             `json:"session_id"`
-	TokenType   string             `json:"token_type"`
-	ExpiresIn   int                `json:"expires_in"`
-	IdleTimeout int                `json:"idle_timeout_seconds"`
-	User        eventlessUser      `json:"user"`
-	Permissions permissionResponse `json:"permissions"`
+	AccessToken  string             `json:"access_token"`
+	RefreshToken string             `json:"refresh_token"`
+	SessionID    string             `json:"session_id"`
+	TokenType    string             `json:"token_type"`
+	ExpiresIn    int                `json:"expires_in"`
+	IdleTimeout  int                `json:"idle_timeout_seconds"`
+	User         eventlessUser      `json:"user"`
+	Permissions  permissionResponse `json:"permissions"`
 }
 
 type permissionResponse struct {
@@ -87,18 +88,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
-	h.setRefreshCookie(c, session.RefreshToken, int(h.service.RefreshTTL().Seconds()))
 	c.JSON(http.StatusOK, makeSessionResponse(session))
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	rawToken, _ := c.Cookie(constants.RefreshCookieName)
-	if rawToken == "" {
-		rawToken = c.GetHeader("X-Refresh-Token")
-	}
+	rawToken := c.GetHeader("X-Refresh-Token")
 	session, err := h.service.Refresh(c.Request.Context(), rawToken, c.GetHeader("User-Agent"))
 	if err != nil {
-		clearRefreshCookie(c, constants.RefreshCookieName, h.secureCookie, "/api/v1/auth")
 		code := "invalid_refresh_token"
 		if errors.Is(err, auth.ErrRefreshReused) {
 			code = "refresh_token_reused"
@@ -106,21 +102,16 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, code, "Session expired")
 		return
 	}
-	h.setRefreshCookie(c, session.RefreshToken, int(h.service.RefreshTTL().Seconds()))
 	c.JSON(http.StatusOK, makeSessionResponse(session))
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	rawToken, _ := c.Cookie(constants.RefreshCookieName)
-	if rawToken == "" {
-		rawToken = c.GetHeader("X-Refresh-Token")
-	}
+	rawToken := c.GetHeader("X-Refresh-Token")
 	if err := h.service.Logout(c.Request.Context(), rawToken); err != nil {
 		logInternalError(c, "sign out", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign out")
 		return
 	}
-	h.setRefreshCookie(c, "", -1)
 	c.Status(http.StatusNoContent)
 }
 
@@ -141,13 +132,14 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 func makeSessionResponse(session auth.Session) sessionResponse {
 	return sessionResponse{
-		AccessToken: session.AccessToken,
-		SessionID:   session.SessionID,
-		TokenType:   "Bearer",
-		ExpiresIn:   session.ExpiresIn,
-		IdleTimeout: session.IdleTimeout,
-		User:        makeUserResponse(session.User),
-		Permissions: makePermissionResponse(session.Permissions),
+		AccessToken:  session.AccessToken,
+		RefreshToken: session.RefreshToken,
+		SessionID:    session.SessionID,
+		TokenType:    "Bearer",
+		ExpiresIn:    session.ExpiresIn,
+		IdleTimeout:  session.IdleTimeout,
+		User:         makeUserResponse(session.User),
+		Permissions:  makePermissionResponse(session.Permissions),
 	}
 }
 
@@ -156,7 +148,7 @@ func makeUserResponse(user auth.User) eventlessUser {
 }
 
 func makePermissionResponse(permissions []auth.Permission) permissionResponse {
-	response := permissionResponse{Warehouses: map[string][]string{}}
+	response := permissionResponse{Company: []string{}, Warehouses: map[string][]string{}}
 	seenCompany := map[string]bool{}
 	seenWarehouse := map[string]map[string]bool{}
 	for _, permission := range permissions {
@@ -177,12 +169,6 @@ func makePermissionResponse(permissions []auth.Permission) permissionResponse {
 		}
 	}
 	return response
-}
-
-func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string, maxAge int) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(constants.RefreshCookieName, token, maxAge, "/api/v1", "", h.secureCookie, true)
-	c.SetCookie(constants.RefreshCookieName, "", -1, "/api/v1/auth", "", h.secureCookie, true)
 }
 
 func currentUser(c *gin.Context) (auth.User, bool) {

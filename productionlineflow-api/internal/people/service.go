@@ -201,9 +201,6 @@ func (s *Service) CreatePerson(ctx context.Context, actor rbac.Actor, input Crea
 	if input.Name == "" || !validEmail(input.Email) || len(input.Password) < s.minPassword {
 		return Person{}, ErrInvalidInput
 	}
-	if !policy.CompanyUser && len(input.Assignments) == 0 {
-		return Person{}, ErrInvalidInput
-	}
 	passwordHash, err := auth.HashPassword(input.Password)
 	if err != nil {
 		return Person{}, fmt.Errorf("hash person password: %w", err)
