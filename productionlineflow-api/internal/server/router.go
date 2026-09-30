@@ -94,6 +94,24 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		secured.PATCH("/warehouses/:id", warehouseHandler.Update)
 		secured.DELETE("/warehouses/:id", warehouseHandler.Delete)
 	}
+	if deps != nil && deps.People != nil {
+		peopleHandler := NewPeopleHandler(deps.People)
+		secured.GET("/users", peopleHandler.List)
+		secured.GET("/users/:id", peopleHandler.Get)
+		secured.POST("/users", peopleHandler.Create)
+		secured.PATCH("/users/:id", peopleHandler.Update)
+		secured.DELETE("/users/:id", peopleHandler.Deactivate)
+		secured.PATCH("/users/:id/password", peopleHandler.ResetPassword)
+		secured.PATCH("/me/password", peopleHandler.ChangeOwnPassword)
+		secured.POST("/users/:id/role-assignments", peopleHandler.AddAssignment)
+		secured.DELETE("/users/:id/role-assignments/:assignmentId", peopleHandler.RemoveAssignment)
+		secured.POST("/users/:id/transfer-super-admin", peopleHandler.TransferSuperAdmin)
+		secured.GET("/roles", peopleHandler.ListRoles)
+		secured.GET("/permissions", peopleHandler.ListPermissionCatalog)
+		secured.POST("/roles", peopleHandler.CreateRole)
+		secured.PATCH("/roles/:id", peopleHandler.UpdateRole)
+		secured.DELETE("/roles/:id", peopleHandler.DeleteRole)
+	}
 	return r
 }
 

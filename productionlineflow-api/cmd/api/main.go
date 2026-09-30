@@ -9,6 +9,7 @@ import (
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/config"
+	"productionlineflow-api/internal/people"
 	database "productionlineflow-api/internal/platform/db"
 	"productionlineflow-api/internal/server"
 	warehouseModule "productionlineflow-api/internal/warehouse"
@@ -34,6 +35,7 @@ func main() {
 	platformAuthService := auth.NewPlatformService(repository, jwtService, time.Duration(cfg.Auth.RefreshTTLHours)*time.Hour)
 	companyService := company.NewService(company.NewPostgresRepository(pool), cfg.Auth.MinPasswordLength)
 	warehouseService := warehouseModule.NewService(warehouseModule.NewPostgresRepository(pool))
+	peopleService := people.NewService(people.NewPostgresRepository(pool), cfg.Auth.MinPasswordLength)
 	r := server.NewRouter(cfg, &server.Dependencies{
 		Auth:               authService,
 		PlatformAuth:       platformAuthService,
@@ -42,6 +44,7 @@ func main() {
 		PlatformRepository: repository,
 		Company:            companyService,
 		Warehouse:          warehouseService,
+		People:             peopleService,
 		SecureCookie:       cfg.Env == "prod",
 	})
 	if err := r.Run(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil {

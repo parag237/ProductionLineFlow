@@ -25,6 +25,10 @@ type MeResponse = {
   permissions: Permissions;
 };
 type Warehouse = { id: number; name: string; type_name: string; address?: string; state: string; created_at: string };
+type Person = { id: number; name: string; email: string; is_active: boolean; assignments: Assignment[] };
+type Assignment = { id: number; role_id: number; role_slug: string; role_name: string; role_scope: string; warehouse_id: number | null; warehouse_name?: string };
+type Role = { id: number; slug: string; name: string; scope: string; is_system: boolean; permissions: string[] };
+type Permission = { key: string; description: string };
 
 type ApiError = Error & { code?: string; status?: number };
 
@@ -165,12 +169,12 @@ function LoginView({ onLogin }: { onLogin: (session: SessionResponse) => void })
   );
 }
 
-function Workspace({ user, permissions, onLogout, onOpenWarehouses }: { user: User; permissions: Permissions; onLogout: () => void; onOpenWarehouses: () => void }) {
+function Workspace({ user, permissions, onLogout, onOpenWarehouses, onOpenPeople }: { user: User; permissions: Permissions; onLogout: () => void; onOpenWarehouses: () => void; onOpenPeople: () => void }) {
   const navigation = [
     { label: 'Warehouses', permission: 'warehouse.view' },
     { label: 'People & roles', permission: 'users.create' },
     { label: 'Operations', permission: 'workers.tasks.execute' },
-  ].filter((item) => permissions.company.includes(item.permission));
+  ].filter((item) => item.label === 'People & roles' ? permissions.company.includes('users.create') || Object.values(permissions.warehouses).some((list) => list.includes('warehouse.members.manage')) : permissions.company.includes(item.permission));
 
   return (
     <main className="workspace-shell">
@@ -195,7 +199,7 @@ function Workspace({ user, permissions, onLogout, onOpenWarehouses }: { user: Us
         </div>
         <div className="workspace-grid">
           {navigation.length > 0 ? navigation.map((item) => (
-            <button className="workspace-card" key={item.label} onClick={item.label === 'Warehouses' ? onOpenWarehouses : undefined}>
+            <button className="workspace-card" key={item.label} onClick={item.label === 'Warehouses' ? onOpenWarehouses : item.label === 'People & roles' ? onOpenPeople : undefined}>
               <span className="card-arrow">↗</span>
               <span className="card-label">{item.label}</span>
               <span className="card-meta">Available to your role</span>
@@ -205,6 +209,90 @@ function Workspace({ user, permissions, onLogout, onOpenWarehouses }: { user: Us
       </section>
     </main>
   );
+}
+
+function PeopleDashboard({ user, permissions, onBack }: { user: User; permissions: Permissions; onBack: () => void }) {
+  const canManageCompany = permissions.company.includes('users.create');
+  const canManageAdmins = permissions.company.includes('admins.manage');
+  const canManageRoles = permissions.company.includes('roles.manage');
+  const managedWarehouseIds = Object.entries(permissions.warehouses).filter(([, perms]) => perms.includes('warehouse.members.manage')).map(([id]) => Number(id));
+  const [people, setPeople] = useState<Person[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [catalog, setCatalog] = useState<Permission[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('active');
+  const [tab, setTab] = useState<'people' | 'roles'>('people');
+  const [editing, setEditing] = useState<Person | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [roleID, setRoleID] = useState(''); const [warehouseID, setWarehouseID] = useState('');
+  const [roleName, setRoleName] = useState(''); const [roleScope, setRoleScope] = useState('warehouse'); const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]); const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const canSeeRoles = canManageRoles;
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const [personResult, roleResult, warehouseResult] = await Promise.all([
+        request<{ people: Person[] }>(`/users?status=${status}&q=${encodeURIComponent(query)}`),
+        request<{ roles: Role[] }>('/roles'),
+        request<{ warehouses: Warehouse[] }>('/warehouses'),
+      ]);
+      setPeople(personResult.people ?? []); setRoles(roleResult.roles ?? []); setWarehouses(warehouseResult.warehouses ?? []);
+      if (canManageRoles) { const permissionResult = await request<{ permissions: Permission[] }>('/permissions'); setCatalog(permissionResult.permissions ?? []); }
+    } catch (e) { setError((e as ApiError).message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [status, query]);
+  const allowedRoles = roles.filter((role) => role.slug !== 'super_admin' && (canManageAdmins || role.scope === 'warehouse') && (canManageCompany || role.slug === 'worker'));
+  const availableWarehouses = warehouses.filter((item) => canManageCompany || managedWarehouseIds.includes(item.id));
+  function createPerson() { setEditing(null); setName(''); setEmail(''); setPassword(''); setRoleID(''); setWarehouseID(''); setShowForm(true); setError(''); }
+  function editPerson(person: Person) { setEditing(person); setName(person.name); setEmail(person.email); setPassword(''); setShowForm(true); setError(''); }
+  async function savePerson(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    try {
+      if (editing) await request(`/users/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, email }) });
+      else {
+        const assignments = roleID ? [{ role_id: Number(roleID), warehouse_id: roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' ? Number(warehouseID) : null }] : [];
+        await request('/users', { method: 'POST', body: JSON.stringify({ name, email, password, assignments }) });
+      }
+      setShowForm(false); await load();
+    } catch (e) { setError((e as ApiError).message); }
+  }
+  async function deactivate(person: Person) {
+    try { if (person.is_active) await request(`/users/${person.id}`, { method: 'DELETE' }); else await request(`/users/${person.id}`, { method: 'PATCH', body: JSON.stringify({ is_active: true }) }); await load(); }
+    catch (e) { setError((e as ApiError).message); }
+  }
+  async function addAssignment(person: Person) {
+    if (!roleID) return;
+    const role = roles.find((r) => r.id === Number(roleID)); if (!role) return;
+    try { await request(`/users/${person.id}/role-assignments`, { method: 'POST', body: JSON.stringify({ role_id: role.id, warehouse_id: role.scope === 'warehouse' ? Number(warehouseID) : null }) }); setRoleID(''); setWarehouseID(''); await load(); }
+    catch (e) { setError((e as ApiError).message); }
+  }
+  async function removeAssignment(person: Person, assignment: Assignment) {
+    try { await request(`/users/${person.id}/role-assignments/${assignment.id}`, { method: 'DELETE' }); await load(); } catch (e) { setError((e as ApiError).message); }
+  }
+  async function saveRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    try {
+      if (editingRole) await request(`/roles/${editingRole.id}`, { method: 'PATCH', body: JSON.stringify({ name: roleName, permissions: selectedPermissions }) });
+      else await request('/roles', { method: 'POST', body: JSON.stringify({ name: roleName, scope: roleScope, permissions: selectedPermissions }) });
+      setEditingRole(null); setRoleName(''); setSelectedPermissions([]); await load();
+    } catch (e) { setError((e as ApiError).message); }
+  }
+  async function removeRole(role: Role) { try { await request(`/roles/${role.id}`, { method: 'DELETE' }); await load(); } catch (e) { setError((e as ApiError).message); } }
+  return <main className="workspace-shell"><header className="topbar"><div><span className="eyebrow">{user.company_slug}</span><strong>ProductionLineFlow</strong></div><button className="quiet-button" onClick={onBack}>← Overview</button></header><section className="workspace-content people-workspace"><div className="workspace-heading"><div><span className="panel-kicker">Company workspace</span><h1>People & roles</h1><p>Manage company access and warehouse memberships.</p></div></div>
+    <div className="people-toolbar"><div className="people-tabs"><button className={tab === 'people' ? 'primary-button' : 'quiet-button'} onClick={() => setTab('people')}>People</button>{canSeeRoles && <button className={tab === 'roles' ? 'primary-button' : 'quiet-button'} onClick={() => setTab('roles')}>Roles</button>}</div>{tab === 'people' && <div className="people-filters"><input aria-label="Search people" placeholder="Search name or email" value={query} onChange={(e) => setQuery(e.target.value)} /><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All statuses</option></select>{(canManageCompany || managedWarehouseIds.length > 0) && <button className="primary-button" onClick={createPerson}>Add person</button>}</div>}</div>
+    {error && <div className="form-error" role="alert">{error}</div>}
+    {tab === 'people' && showForm && <form className="people-form" onSubmit={savePerson}><h2>{editing ? 'Edit person' : 'Add person'}</h2><label>Name<input required value={name} onChange={(e) => setName(e.target.value)} /></label><label>Company email<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>{!editing && <><label>Initial password<input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} /></label><label>Role<select value={roleID} onChange={(e) => setRoleID(e.target.value)} required><option value="">Choose a role</option>{allowedRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>{roleID && roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && <label>Warehouse<select required value={warehouseID} onChange={(e) => setWarehouseID(e.target.value)}><option value="">Choose a warehouse</option>{availableWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}</>}<div className="people-actions"><button className="primary-button" type="submit">Save</button><button className="quiet-button" type="button" onClick={() => setShowForm(false)}>Cancel</button></div></form>}
+    {loading ? <div className="empty-state">Loading people and roles…</div> : tab === 'people' ? people.length === 0 ? <div className="empty-state">No people match this filter.</div> : <div className="people-list">{people.map((person) => { const isManager = !canManageCompany; return <article className="people-card" key={person.id}><div className="people-person"><div><h2>{person.name}</h2><p>{person.email}</p></div><span className={person.is_active ? 'people-status active' : 'people-status'}>{person.is_active ? 'Active' : 'Inactive'}</span></div><div className="assignment-list">{person.assignments.map((assignment) => <span className="assignment-chip" key={assignment.id}>{assignment.role_name}{assignment.warehouse_name ? ` · ${assignment.warehouse_name}` : ''}{(canManageAdmins || (isManager && assignment.role_slug === 'worker' && managedWarehouseIds.includes(assignment.warehouse_id ?? -1))) && assignment.role_slug !== 'super_admin' && <button aria-label={`Remove ${assignment.role_name} assignment`} onClick={() => void removeAssignment(person, assignment)}>×</button>}</span>)}</div>{allowedRoles.length > 0 && person.is_active && <div className="people-actions"><select aria-label="Role to assign" value={roleID} onChange={(e) => setRoleID(e.target.value)}><option value="">Add assignment…</option>{allowedRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select>{roleID && roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && <select aria-label="Assignment warehouse" value={warehouseID} onChange={(e) => setWarehouseID(e.target.value)}><option value="">Choose warehouse</option>{availableWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}<button className="quiet-button" disabled={!roleID || (roles.find((r) => r.id === Number(roleID))?.scope === 'warehouse' && !warehouseID)} onClick={() => void addAssignment(person)}>Assign role</button></div>}{!isManager && <div className="people-actions"><button className="quiet-button" onClick={() => editPerson(person)}>Edit</button><button className="quiet-button" onClick={() => void deactivate(person)}>{person.is_active ? 'Deactivate' : 'Reactivate'}</button>{canManageCompany && <PasswordReset person={person} />}{canManageAdmins && person.is_active && !person.assignments.some((a) => a.role_slug === 'super_admin') && <button className="quiet-button" onClick={async () => { if (confirm(`Transfer Super Admin to ${person.name}?`)) { try { await request(`/users/${person.id}/transfer-super-admin`, { method: 'POST' }); await load(); } catch (e) { setError((e as ApiError).message); } } }}>Transfer Super Admin</button>}</div>}</article>; })}</div> : <><form className="people-form" onSubmit={saveRole}><h2>{editingRole ? 'Edit custom role' : 'Create custom role'}</h2><label>Role name<input required value={roleName} onChange={(e) => setRoleName(e.target.value)} /></label>{!editingRole && <label>Scope<select value={roleScope} onChange={(e) => setRoleScope(e.target.value)}><option value="warehouse">Warehouse</option><option value="company">Company</option></select></label>}<fieldset><legend>Permissions</legend><div className="permission-options">{catalog.map((permission) => <label key={permission.key}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(e) => setSelectedPermissions(e.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((p) => p !== permission.key))} />{permission.description || permission.key}</label>)}</div></fieldset><div className="people-actions"><button className="primary-button" disabled={selectedPermissions.length === 0}>Save role</button>{editingRole && <button type="button" className="quiet-button" onClick={() => { setEditingRole(null); setRoleName(''); setSelectedPermissions([]); }}>Cancel</button>}</div></form><div className="people-list">{roles.map((role) => <article className="people-card" key={role.id}><div className="people-person"><h2>{role.name}</h2><span>{role.scope} · {role.is_system ? 'System role' : 'Custom role'}</span></div><p>{role.permissions.join(', ')}</p>{!role.is_system && <div className="people-actions"><button className="quiet-button" onClick={() => { setEditingRole(role); setRoleName(role.name); setSelectedPermissions(role.permissions); }}>Edit</button><button className="quiet-button" onClick={() => void removeRole(role)}>Delete</button></div>}</article>)}</div></>}
+  </section></main>;
+}
+
+function PasswordReset({ person }: { person: Person }) {
+  const [password, setPassword] = useState(''); const [message, setMessage] = useState('');
+  return <form className="inline-password" onSubmit={async (event) => { event.preventDefault(); try { await request(`/users/${person.id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) }); setPassword(''); setMessage('Password updated'); } catch (e) { setMessage((e as ApiError).message); } }}><input type="password" minLength={8} required placeholder="New password" value={password} onChange={(e) => setPassword(e.target.value)} /><button className="quiet-button">Reset password</button>{message && <small>{message}</small>}</form>;
 }
 
 function WarehouseDashboard({ canManage, onBack }: { canManage: boolean; onBack: () => void }) {
@@ -450,6 +538,7 @@ export default function App() {
   const [permissions, setPermissions] = useState<Permissions>({ company: [], warehouses: {} });
   const [loading, setLoading] = useState(true);
   const [showWarehouses, setShowWarehouses] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -489,5 +578,6 @@ export default function App() {
     return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(session.permissions); }} />;
   }
   if (showWarehouses) return <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} onBack={() => setShowWarehouses(false)} />;
-  return <Workspace user={user} permissions={permissions} onLogout={logout} onOpenWarehouses={() => setShowWarehouses(true)} />;
+  if (showPeople) return <PeopleDashboard user={user} permissions={permissions} onBack={() => setShowPeople(false)} />;
+  return <Workspace user={user} permissions={permissions} onLogout={logout} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} />;
 }
