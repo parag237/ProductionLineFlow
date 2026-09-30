@@ -237,6 +237,9 @@ func (r *PostgresRepository) UpdatePerson(ctx context.Context, companyID, id int
 		return Person{}, writeError(err)
 	}
 	if currentActive && !updatedActive {
+		if _, err := tx.Exec(ctx, `UPDATE tenant_auth_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE company_id=$1 AND user_id=$2 AND revoked_at IS NULL`, companyID, id); err != nil {
+			return Person{}, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1 AND company_id=$2 AND revoked_at IS NULL`, id, companyID); err != nil {
 			return Person{}, err
 		}
@@ -268,6 +271,9 @@ func (r *PostgresRepository) SetPassword(ctx context.Context, companyID, id int6
 		return ErrNotFound
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1 AND company_id=$2 AND revoked_at IS NULL`, id, companyID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tenant_auth_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1 AND company_id=$2 AND revoked_at IS NULL`, id, companyID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

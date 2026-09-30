@@ -18,6 +18,7 @@ type JWTService struct {
 type AccessClaims struct {
 	UserID      int64  `json:"user_id"`
 	CompanyID   int64  `json:"company_id"`
+	SessionID   string `json:"sid"`
 	PermVersion int    `json:"perm_version"`
 	TokenType   string `json:"token_type"`
 	jwt.RegisteredClaims
@@ -25,6 +26,7 @@ type AccessClaims struct {
 
 type PlatformClaims struct {
 	PlatformUserID int64  `json:"platform_user_id"`
+	SessionID      string `json:"sid"`
 	PermVersion    int    `json:"perm_version"`
 	TokenType      string `json:"token_type"`
 	jwt.RegisteredClaims
@@ -34,11 +36,12 @@ func NewJWTService(secret string, ttl time.Duration, issuer string) *JWTService 
 	return &JWTService{secret: []byte(secret), ttl: ttl, issuer: issuer}
 }
 
-func (s *JWTService) SignAccess(userID, companyID int64, permVersion int) (string, error) {
+func (s *JWTService) SignAccess(userID, companyID int64, permVersion int, sessionID string) (string, error) {
 	now := time.Now()
 	claims := AccessClaims{
 		UserID:      userID,
 		CompanyID:   companyID,
+		SessionID:   sessionID,
 		PermVersion: permVersion,
 		TokenType:   constants.TenantAccessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -53,10 +56,11 @@ func (s *JWTService) SignAccess(userID, companyID int64, permVersion int) (strin
 	return payload.SignedString(s.secret)
 }
 
-func (s *JWTService) SignPlatformAccess(userID int64, permVersion int) (string, error) {
+func (s *JWTService) SignPlatformAccess(userID int64, permVersion int, sessionID string) (string, error) {
 	now := time.Now()
 	claims := PlatformClaims{
 		PlatformUserID: userID,
+		SessionID:      sessionID,
 		PermVersion:    permVersion,
 		TokenType:      constants.PlatformAccessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -81,7 +85,7 @@ func (s *JWTService) ValidateAccess(token string) (*AccessClaims, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !parsed.Valid || claims.TokenType != constants.TenantAccessTokenType {
+	if !parsed.Valid || claims.TokenType != constants.TenantAccessTokenType || claims.SessionID == "" {
 		return nil, jwt.ErrTokenInvalidClaims
 	}
 	return claims, nil
@@ -98,7 +102,7 @@ func (s *JWTService) ValidatePlatformAccess(token string) (*PlatformClaims, erro
 	if err != nil {
 		return nil, err
 	}
-	if !parsed.Valid || claims.TokenType != constants.PlatformAccessTokenType {
+	if !parsed.Valid || claims.TokenType != constants.PlatformAccessTokenType || claims.SessionID == "" {
 		return nil, jwt.ErrTokenInvalidClaims
 	}
 	return claims, nil

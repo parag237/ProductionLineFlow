@@ -108,8 +108,13 @@ func (r *PostgresRepository) UpdateCompany(ctx context.Context, id int64, input 
 }
 
 func (r *PostgresRepository) SuspendCompany(ctx context.Context, id int64) (Company, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Company{}, err
+	}
+	defer tx.Rollback(ctx)
 	var item Company
-	err := r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE companies SET status = 'suspended', suspended_at = now(), updated_at = now()
 		WHERE id = $1
 		RETURNING id, slug, name, status, suspended_at, activated_at
@@ -117,7 +122,19 @@ func (r *PostgresRepository) SuspendCompany(ctx context.Context, id int64) (Comp
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Company{}, ErrNotFound
 	}
-	return item, err
+	if err != nil {
+		return Company{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tenant_auth_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE company_id=$1 AND revoked_at IS NULL`, id); err != nil {
+		return Company{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE company_id=$1 AND revoked_at IS NULL`, id); err != nil {
+		return Company{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Company{}, err
+	}
+	return item, nil
 }
 
 func (r *PostgresRepository) ReactivateCompany(ctx context.Context, id int64) (Company, error) {

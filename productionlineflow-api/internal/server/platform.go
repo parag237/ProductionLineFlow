@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
@@ -30,8 +31,10 @@ type platformLoginRequest struct {
 
 type platformSessionResponse struct {
 	AccessToken string               `json:"access_token"`
+	SessionID   string               `json:"session_id"`
 	TokenType   string               `json:"token_type"`
 	ExpiresIn   int                  `json:"expires_in"`
+	IdleTimeout int                  `json:"idle_timeout_seconds"`
 	User        platformUserResponse `json:"user"`
 	Permissions []string             `json:"permissions"`
 }
@@ -65,6 +68,7 @@ func (h *PlatformHandler) Refresh(c *gin.Context) {
 	rawToken, _ := c.Cookie(constants.PlatformRefreshCookieName)
 	session, err := h.service.Refresh(c.Request.Context(), rawToken, c.GetHeader("User-Agent"))
 	if err != nil {
+		clearRefreshCookie(c, constants.PlatformRefreshCookieName, h.secureCookie, "/api/v1/platform/auth")
 		code := "invalid_platform_refresh_token"
 		if errors.Is(err, auth.ErrPlatformRefreshReused) {
 			code = "platform_refresh_token_reused"
@@ -245,7 +249,7 @@ func (h *PlatformHandler) writeCompanyError(c *gin.Context, err error) {
 }
 
 func makePlatformSessionResponse(session auth.PlatformSession) platformSessionResponse {
-	return platformSessionResponse{AccessToken: session.AccessToken, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, User: makePlatformUserResponse(session.User), Permissions: session.Permissions}
+	return platformSessionResponse{AccessToken: session.AccessToken, SessionID: session.SessionID, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, IdleTimeout: session.IdleTimeout, User: makePlatformUserResponse(session.User), Permissions: session.Permissions}
 }
 
 func makePlatformUserResponse(user auth.PlatformUser) platformUserResponse {
@@ -254,10 +258,11 @@ func makePlatformUserResponse(user auth.PlatformUser) platformUserResponse {
 
 func (h *PlatformHandler) setRefreshCookie(c *gin.Context, token string, maxAge int) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(constants.PlatformRefreshCookieName, token, maxAge, "/api/v1/platform/auth", "", h.secureCookie, true)
+	c.SetCookie(constants.PlatformRefreshCookieName, token, maxAge, "/api/v1", "", h.secureCookie, true)
+	c.SetCookie(constants.PlatformRefreshCookieName, "", -1, "/api/v1/platform/auth", "", h.secureCookie, true)
 }
 
-func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRepository) gin.HandlerFunc {
+func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRepository, idleTimeout time.Duration, secureCookie bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerToken(c.GetHeader("Authorization"))
 		claims, err := jwtService.ValidatePlatformAccess(token)
@@ -276,6 +281,22 @@ func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRe
 			writeError(c, http.StatusUnauthorized, "permissions_changed", "Permissions changed; refresh your session")
 			c.Abort()
 			return
+		}
+		refreshCookie, _ := c.Cookie(constants.PlatformRefreshCookieName)
+		active, cookieMatches, err := repository.TouchPlatformSession(c.Request.Context(), claims.SessionID, user.ID, auth.HashRefreshToken(refreshCookie), time.Now().Add(idleTimeout))
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "internal_error", "Unable to validate platform session")
+			c.Abort()
+			return
+		}
+		if !active {
+			clearRefreshCookie(c, constants.PlatformRefreshCookieName, secureCookie, "/api/v1/platform/auth")
+			writeError(c, http.StatusUnauthorized, "session_expired", "Platform session expired")
+			c.Abort()
+			return
+		}
+		if cookieMatches {
+			renewRefreshCookie(c, constants.PlatformRefreshCookieName, refreshCookie, idleTimeout, secureCookie, "/api/v1/platform/auth")
 		}
 		permissions, err := repository.ListPlatformPermissions(c.Request.Context(), user.ID)
 		if err != nil {

@@ -40,8 +40,8 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		platform.POST("/auth/refresh", platformHandler.Refresh)
 		platform.POST("/auth/logout", platformHandler.Logout)
 		platformSecured := platform.Group("")
-		if deps.JWT != nil && deps.PlatformRepository != nil {
-			platformSecured.Use(RequirePlatformAuth(deps.JWT, deps.PlatformRepository))
+		if deps.JWT != nil && deps.PlatformRepository != nil && deps.PlatformAuth != nil {
+			platformSecured.Use(RequirePlatformAuth(deps.JWT, deps.PlatformRepository, deps.PlatformAuth.RefreshTTL(), deps.SecureCookie))
 		}
 		platformSecured.GET("/me", platformHandler.Me)
 		platformSecured.POST("/companies", RequirePlatformPermission(constants.PermissionCompaniesCreate), platformHandler.CreateCompany)
@@ -62,8 +62,8 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	}
 
 	secured := v1.Group("")
-	if deps != nil && deps.JWT != nil && deps.Repository != nil {
-		secured.Use(RequireTenantAuth(deps.JWT, deps.Repository))
+	if deps != nil && deps.JWT != nil && deps.Repository != nil && deps.Auth != nil {
+		secured.Use(RequireTenantAuth(deps.JWT, deps.Repository, deps.Auth.RefreshTTL(), deps.SecureCookie))
 	}
 	if deps != nil && deps.Auth != nil {
 		authHandler := NewAuthHandler(deps.Auth, deps.SecureCookie)

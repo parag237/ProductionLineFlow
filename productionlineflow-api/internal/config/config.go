@@ -38,7 +38,7 @@ type AuthConfig struct {
 	JWTSecret         string `json:"jwt_secret"`
 	JWTIssuer         string `json:"jwt_issuer"`
 	AccessTTLMin      int    `json:"access_ttl_min"`
-	RefreshTTLHours   int    `json:"refresh_ttl_hours"`
+	RefreshTTLHours   int    `json:"refresh_ttl_hours"` // Rolling authentication idle timeout, renewed by authenticated API activity.
 	MinPasswordLength int    `json:"min_password_length"`
 }
 
@@ -103,6 +103,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth.JWTIssuer == "" {
 		return fmt.Errorf("auth.jwt_issuer is required")
+	}
+	if c.Auth.AccessTTLMin <= 0 {
+		return fmt.Errorf("auth.access_ttl_min must be greater than zero")
+	}
+	if c.Auth.RefreshTTLHours <= 0 {
+		return fmt.Errorf("auth.refresh_ttl_hours must be greater than zero")
 	}
 	if c.Auth.MinPasswordLength < 8 {
 		return fmt.Errorf("auth.min_password_length must be at least 8")

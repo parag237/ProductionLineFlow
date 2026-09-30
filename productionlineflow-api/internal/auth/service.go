@@ -28,6 +28,7 @@ type User struct {
 	PasswordHash string
 	IsActive     bool
 	PermVersion  int
+	SessionID    string
 }
 
 type Permission struct {
@@ -41,9 +42,10 @@ type Repository interface {
 	FindUserByLogin(ctx context.Context, companySlug, email string) (User, error)
 	FindUserByID(ctx context.Context, userID, companyID int64) (User, error)
 	ListPermissions(ctx context.Context, userID, companyID int64) ([]Permission, error)
-	CreateRefreshToken(ctx context.Context, userID, companyID int64, hash string, expiresAt time.Time, userAgent string) error
+	CreateRefreshToken(ctx context.Context, userID, companyID int64, sessionID, hash string, expiresAt time.Time, userAgent string) error
 	RotateRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time, userAgent string) (User, error)
 	RevokeRefreshToken(ctx context.Context, hash string) error
+	TouchTenantSession(ctx context.Context, sessionID string, userID, companyID int64, refreshHash string, expiresAt time.Time) (bool, bool, error)
 }
 
 type Service struct {
@@ -71,7 +73,9 @@ type LoginInput struct {
 type Session struct {
 	AccessToken  string
 	RefreshToken string
+	SessionID    string
 	ExpiresIn    int
+	IdleTimeout  int
 	User         User
 	Permissions  []Permission
 }
@@ -86,7 +90,11 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (Session, error) 
 		return Session{}, ErrInvalidCredentials
 	}
 
-	accessToken, err := s.jwt.SignAccess(user.ID, user.CompanyID, user.PermVersion)
+	sessionID, err := newSessionID()
+	if err != nil {
+		return Session{}, fmt.Errorf("create session id: %w", err)
+	}
+	accessToken, err := s.jwt.SignAccess(user.ID, user.CompanyID, user.PermVersion, sessionID)
 	if err != nil {
 		return Session{}, fmt.Errorf("sign access token: %w", err)
 	}
@@ -95,7 +103,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (Session, error) 
 	if err != nil {
 		return Session{}, fmt.Errorf("create refresh token: %w", err)
 	}
-	if err := s.repository.CreateRefreshToken(ctx, user.ID, user.CompanyID, refreshHash, time.Now().Add(s.refreshTTL), input.UserAgent); err != nil {
+	if err := s.repository.CreateRefreshToken(ctx, user.ID, user.CompanyID, sessionID, refreshHash, time.Now().Add(s.refreshTTL), input.UserAgent); err != nil {
 		return Session{}, fmt.Errorf("store refresh token: %w", err)
 	}
 
@@ -107,7 +115,9 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (Session, error) 
 	return Session{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		SessionID:    sessionID,
 		ExpiresIn:    int(s.jwt.TTL().Seconds()),
+		IdleTimeout:  int(s.refreshTTL.Seconds()),
 		User:         user,
 		Permissions:  permissions,
 	}, nil
@@ -126,7 +136,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken, userAgent string) (Sess
 	if err != nil {
 		return Session{}, err
 	}
-	accessToken, err := s.jwt.SignAccess(user.ID, user.CompanyID, user.PermVersion)
+	accessToken, err := s.jwt.SignAccess(user.ID, user.CompanyID, user.PermVersion, user.SessionID)
 	if err != nil {
 		return Session{}, fmt.Errorf("sign access token: %w", err)
 	}
@@ -135,7 +145,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken, userAgent string) (Sess
 		return Session{}, fmt.Errorf("load permissions: %w", err)
 	}
 
-	return Session{AccessToken: accessToken, RefreshToken: newToken, ExpiresIn: int(s.jwt.TTL().Seconds()), User: user, Permissions: permissions}, nil
+	return Session{AccessToken: accessToken, RefreshToken: newToken, SessionID: user.SessionID, ExpiresIn: int(s.jwt.TTL().Seconds()), IdleTimeout: int(s.refreshTTL.Seconds()), User: user, Permissions: permissions}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, rawToken string) error {
@@ -156,6 +166,16 @@ func PermissionsForActor(permissions []Permission) rbac.Actor {
 func hashToken(token string) string {
 	digest := sha256.Sum256([]byte(token))
 	return base64.RawURLEncoding.EncodeToString(digest[:])
+}
+
+func HashRefreshToken(token string) string { return hashToken(token) }
+
+func newSessionID() (string, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
 }
 
 func newRefreshToken() (string, string, error) {

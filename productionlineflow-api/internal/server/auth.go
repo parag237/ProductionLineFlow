@@ -53,8 +53,10 @@ type eventlessUser struct {
 
 type sessionResponse struct {
 	AccessToken string             `json:"access_token"`
+	SessionID   string             `json:"session_id"`
 	TokenType   string             `json:"token_type"`
 	ExpiresIn   int                `json:"expires_in"`
+	IdleTimeout int                `json:"idle_timeout_seconds"`
 	User        eventlessUser      `json:"user"`
 	Permissions permissionResponse `json:"permissions"`
 }
@@ -95,6 +97,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 	session, err := h.service.Refresh(c.Request.Context(), rawToken, c.GetHeader("User-Agent"))
 	if err != nil {
+		clearRefreshCookie(c, constants.RefreshCookieName, h.secureCookie, "/api/v1/auth")
 		code := "invalid_refresh_token"
 		if errors.Is(err, auth.ErrRefreshReused) {
 			code = "refresh_token_reused"
@@ -137,8 +140,10 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func makeSessionResponse(session auth.Session) sessionResponse {
 	return sessionResponse{
 		AccessToken: session.AccessToken,
+		SessionID:   session.SessionID,
 		TokenType:   "Bearer",
 		ExpiresIn:   session.ExpiresIn,
+		IdleTimeout: session.IdleTimeout,
 		User:        makeUserResponse(session.User),
 		Permissions: makePermissionResponse(session.Permissions),
 	}
@@ -174,7 +179,8 @@ func makePermissionResponse(permissions []auth.Permission) permissionResponse {
 
 func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string, maxAge int) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(constants.RefreshCookieName, token, maxAge, "/api/v1/auth", "", h.secureCookie, true)
+	c.SetCookie(constants.RefreshCookieName, token, maxAge, "/api/v1", "", h.secureCookie, true)
+	c.SetCookie(constants.RefreshCookieName, "", -1, "/api/v1/auth", "", h.secureCookie, true)
 }
 
 func currentUser(c *gin.Context) (auth.User, bool) {

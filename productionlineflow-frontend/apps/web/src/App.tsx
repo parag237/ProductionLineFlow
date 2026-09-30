@@ -15,7 +15,9 @@ type Permissions = {
 
 type SessionResponse = {
   access_token: string;
+  session_id: string;
   expires_in: number;
+  idle_timeout_seconds: number;
   user: User;
   permissions: Permissions;
 };
@@ -36,9 +38,104 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api
 
 let accessToken = '';
 let platformAccessToken = '';
+let tenantSessionID = '';
+let platformSessionID = '';
+let tenantIdleTimeout = 0;
+let platformIdleTimeout = 0;
+let tenantIdleTimer: number | undefined;
+let platformIdleTimer: number | undefined;
+let tenantRefreshPromise: Promise<SessionResponse> | null = null;
+let platformRefreshPromise: Promise<PlatformSession> | null = null;
+
+function idleStorageKey(platform: boolean, sessionID: string, suffix: string) {
+  return `productionlineflow:${platform ? 'platform' : 'tenant'}:${sessionID}:${suffix}`;
+}
+
+function armIdleTimer(platform: boolean, activityAt = Date.now()) {
+  const sessionID = platform ? platformSessionID : tenantSessionID;
+  const timeout = platform ? platformIdleTimeout : tenantIdleTimeout;
+  if (!sessionID || timeout <= 0) return;
+  const timer = platform ? platformIdleTimer : tenantIdleTimer;
+  if (timer !== undefined) window.clearTimeout(timer);
+  const nextTimer = window.setTimeout(() => redirectToLogin(platform), Math.max(0, timeout * 1000 - (Date.now() - activityAt)));
+  if (platform) platformIdleTimer = nextTimer;
+  else tenantIdleTimer = nextTimer;
+}
+
+function recordSessionActivity(platform: boolean) {
+  const sessionID = platform ? platformSessionID : tenantSessionID;
+  const timeout = platform ? platformIdleTimeout : tenantIdleTimeout;
+  if (!sessionID || timeout <= 0) return;
+  const activityAt = Date.now();
+  armIdleTimer(platform, activityAt);
+  try { localStorage.setItem(idleStorageKey(platform, sessionID, 'activity'), JSON.stringify({ activityAt })); } catch { /* browser storage may be disabled */ }
+}
+
+function startIdleSession(platform: boolean, session: { session_id: string; idle_timeout_seconds: number }) {
+  const previousID = platform ? platformSessionID : tenantSessionID;
+  if (previousID && previousID !== session.session_id) {
+    const previousTimer = platform ? platformIdleTimer : tenantIdleTimer;
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+  }
+  if (platform) { platformSessionID = session.session_id; platformIdleTimeout = session.idle_timeout_seconds; }
+  else { tenantSessionID = session.session_id; tenantIdleTimeout = session.idle_timeout_seconds; }
+  recordSessionActivity(platform);
+}
+
+function endIdleSession(platform: boolean) {
+  const sessionID = platform ? platformSessionID : tenantSessionID;
+  const timer = platform ? platformIdleTimer : tenantIdleTimer;
+  if (timer !== undefined) window.clearTimeout(timer);
+  try { if (sessionID) localStorage.setItem(idleStorageKey(platform, sessionID, 'ended'), String(Date.now())); } catch { /* browser storage may be disabled */ }
+  if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; }
+  else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; }
+}
+
+window.addEventListener('storage', (event) => {
+  if (!event.key || !event.newValue) return;
+  for (const platform of [false, true]) {
+    const sessionID = platform ? platformSessionID : tenantSessionID;
+    if (!sessionID || !event.key.startsWith(idleStorageKey(platform, sessionID, ''))) continue;
+    if (event.key === idleStorageKey(platform, sessionID, 'ended')) { redirectToLogin(platform, false); break; }
+    if (event.key === idleStorageKey(platform, sessionID, 'activity')) {
+      try { const value = JSON.parse(event.newValue) as { activityAt?: number }; if (value.activityAt) armIdleTimer(platform, value.activityAt); } catch { /* ignore malformed cross-tab state */ }
+      break;
+    }
+  }
+});
+
+function redirectToLogin(platform = false, broadcast = true) {
+  if (broadcast) endIdleSession(platform);
+  else {
+    const timer = platform ? platformIdleTimer : tenantIdleTimer;
+    if (timer !== undefined) window.clearTimeout(timer);
+    if (platform) { platformIdleTimer = undefined; platformAccessToken = ''; platformSessionID = ''; platformIdleTimeout = 0; }
+    else { tenantIdleTimer = undefined; accessToken = ''; tenantSessionID = ''; tenantIdleTimeout = 0; }
+  }
+  const loginPath = platform ? '/platform/login' : '/login';
+  if (window.location.pathname !== loginPath) window.location.replace(loginPath);
+}
 
 function markFormSubmitted(event: FormEvent<HTMLFormElement>) {
   event.currentTarget.classList.add('form-submitted');
+}
+
+function refreshTenantSession() {
+  if (!tenantRefreshPromise) {
+    const refresh = () => request<SessionResponse>('/auth/refresh', { method: 'POST' }, false);
+    const locks = (navigator as Navigator & { locks?: { request<T>(name: string, callback: () => T | Promise<T>): Promise<Awaited<T>> } }).locks;
+    tenantRefreshPromise = (locks ? locks.request<SessionResponse>('productionlineflow-tenant-refresh', refresh) : refresh()).finally(() => { tenantRefreshPromise = null; });
+  }
+  return tenantRefreshPromise!;
+}
+
+function refreshPlatformSession() {
+  if (!platformRefreshPromise) {
+    const refresh = () => platformRequest<PlatformSession>('/auth/refresh', { method: 'POST' }, false);
+    const locks = (navigator as Navigator & { locks?: { request<T>(name: string, callback: () => T | Promise<T>): Promise<Awaited<T>> } }).locks;
+    platformRefreshPromise = (locks ? locks.request<PlatformSession>('productionlineflow-platform-refresh', refresh) : refresh()).finally(() => { platformRefreshPromise = null; });
+  }
+  return platformRefreshPromise!;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -47,6 +144,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
+	if (accessToken && !path.startsWith('/auth/')) recordSessionActivity(false);
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -56,13 +154,15 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 
   if (response.status === 401 && retry && path !== '/auth/refresh' && path !== '/auth/login') {
     try {
-      const refreshed = await request<SessionResponse>('/auth/refresh', { method: 'POST' }, false);
+      const refreshed = await refreshTenantSession();
       accessToken = refreshed.access_token;
       return request<T>(path, init, false);
     } catch {
       accessToken = '';
+      redirectToLogin(false);
     }
   }
+  if (response.status === 401 && !retry && path !== '/auth/refresh' && path !== '/auth/login') redirectToLogin(false);
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
@@ -73,29 +173,35 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   }
 
   if (response.status === 204) {
+    if (path === '/auth/login' || path === '/auth/refresh') return undefined as T;
     return undefined as T;
   }
-  return response.json() as Promise<T>;
+  const result = await response.json() as T;
+  if (path === '/auth/login' || path === '/auth/refresh') startIdleSession(false, result as SessionResponse);
+  return result;
 }
 
 type PlatformUser = { id: number; name: string; email: string };
-type PlatformSession = { access_token: string; user: PlatformUser; permissions: string[] };
+type PlatformSession = { access_token: string; session_id: string; expires_in: number; idle_timeout_seconds: number; user: PlatformUser; permissions: string[] };
 type PlatformCompany = { id: number; slug: string; name: string; status: 'active' | 'suspended'; suspended_at?: string; activated_at?: string };
 
 async function platformRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
   if (platformAccessToken) headers.set('Authorization', `Bearer ${platformAccessToken}`);
+	if (platformAccessToken && !path.startsWith('/auth/')) recordSessionActivity(true);
   const response = await fetch(`${API_BASE}/platform${path}`, { ...init, headers, credentials: 'include' });
   if (response.status === 401 && retry && path !== '/auth/refresh' && path !== '/auth/login') {
     try {
-      const refreshed = await platformRequest<PlatformSession>('/auth/refresh', { method: 'POST' }, false);
+      const refreshed = await refreshPlatformSession();
       platformAccessToken = refreshed.access_token;
       return platformRequest<T>(path, init, false);
     } catch {
       platformAccessToken = '';
+      redirectToLogin(true);
     }
   }
+  if (response.status === 401 && !retry && path !== '/auth/refresh' && path !== '/auth/login') redirectToLogin(true);
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
     const error = new Error(body?.error?.message ?? 'Request failed') as ApiError;
@@ -103,7 +209,10 @@ async function platformRequest<T>(path: string, init: RequestInit = {}, retry = 
     error.status = response.status;
     throw error;
   }
-  return response.status === 204 ? undefined as T : response.json() as Promise<T>;
+  if (response.status === 204) return undefined as T;
+  const result = await response.json() as T;
+  if (path === '/auth/login' || path === '/auth/refresh') startIdleSession(true, result as PlatformSession);
+  return result;
 }
 
 function LoginView({ onLogin }: { onLogin: (session: SessionResponse) => void }) {
@@ -513,16 +622,16 @@ function PlatformApp() {
 
   useEffect(() => {
     let active = true;
-    platformRequest<PlatformSession>('/auth/refresh', { method: 'POST' })
+    refreshPlatformSession()
       .then((session) => { platformAccessToken = session.access_token; if (active) { setUser(session.user); setPermissions(session.permissions); } })
-      .catch(() => { platformAccessToken = ''; })
+      .catch(() => { platformAccessToken = ''; if (active) redirectToLogin(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
   async function logout() {
     await platformRequest('/auth/logout', { method: 'POST' }).catch(() => undefined);
-    platformAccessToken = '';
+    endIdleSession(true);
     setUser(null);
     setPermissions([]);
   }
@@ -542,7 +651,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    request<SessionResponse>('/auth/refresh', { method: 'POST' })
+    refreshTenantSession()
       .then((session) => {
         accessToken = session.access_token;
         return request<MeResponse>('/me');
@@ -555,6 +664,7 @@ export default function App() {
       })
       .catch(() => {
         accessToken = '';
+        if (active) redirectToLogin(false);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -566,7 +676,7 @@ export default function App() {
 
   async function logout() {
     await request('/auth/logout', { method: 'POST' }).catch(() => undefined);
-    accessToken = '';
+    endIdleSession(false);
     setUser(null);
     setPermissions({ company: [], warehouses: {} });
   }

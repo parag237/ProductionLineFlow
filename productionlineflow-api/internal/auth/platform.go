@@ -20,15 +20,17 @@ type PlatformUser struct {
 	PasswordHash string
 	IsActive     bool
 	PermVersion  int
+	SessionID    string
 }
 
 type PlatformRepository interface {
 	FindPlatformUserByLogin(ctx context.Context, email string) (PlatformUser, error)
 	FindPlatformUserByID(ctx context.Context, userID int64) (PlatformUser, error)
 	ListPlatformPermissions(ctx context.Context, userID int64) ([]string, error)
-	CreatePlatformRefreshToken(ctx context.Context, userID int64, hash string, expiresAt time.Time, userAgent string) error
+	CreatePlatformRefreshToken(ctx context.Context, userID int64, sessionID, hash string, expiresAt time.Time, userAgent string) error
 	RotatePlatformRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time, userAgent string) (PlatformUser, error)
 	RevokePlatformRefreshToken(ctx context.Context, hash string) error
+	TouchPlatformSession(ctx context.Context, sessionID string, userID int64, refreshHash string, expiresAt time.Time) (bool, bool, error)
 }
 
 type PlatformService struct {
@@ -52,7 +54,9 @@ type PlatformLoginInput struct {
 type PlatformSession struct {
 	AccessToken  string
 	RefreshToken string
+	SessionID    string
 	ExpiresIn    int
+	IdleTimeout  int
 	User         PlatformUser
 	Permissions  []string
 }
@@ -65,7 +69,11 @@ func (s *PlatformService) Login(ctx context.Context, input PlatformLoginInput) (
 	if err != nil || !user.IsActive || !VerifyPassword(input.Password, user.PasswordHash) {
 		return PlatformSession{}, ErrInvalidPlatformCredentials
 	}
-	access, err := s.jwt.SignPlatformAccess(user.ID, user.PermVersion)
+	sessionID, err := newSessionID()
+	if err != nil {
+		return PlatformSession{}, err
+	}
+	access, err := s.jwt.SignPlatformAccess(user.ID, user.PermVersion, sessionID)
 	if err != nil {
 		return PlatformSession{}, err
 	}
@@ -73,14 +81,14 @@ func (s *PlatformService) Login(ctx context.Context, input PlatformLoginInput) (
 	if err != nil {
 		return PlatformSession{}, err
 	}
-	if err := s.repository.CreatePlatformRefreshToken(ctx, user.ID, refreshHash, time.Now().Add(s.refreshTTL), input.UserAgent); err != nil {
+	if err := s.repository.CreatePlatformRefreshToken(ctx, user.ID, sessionID, refreshHash, time.Now().Add(s.refreshTTL), input.UserAgent); err != nil {
 		return PlatformSession{}, err
 	}
 	permissions, err := s.repository.ListPlatformPermissions(ctx, user.ID)
 	if err != nil {
 		return PlatformSession{}, err
 	}
-	return PlatformSession{AccessToken: access, RefreshToken: refresh, ExpiresIn: int(s.jwt.TTL().Seconds()), User: user, Permissions: permissions}, nil
+	return PlatformSession{AccessToken: access, RefreshToken: refresh, SessionID: sessionID, ExpiresIn: int(s.jwt.TTL().Seconds()), IdleTimeout: int(s.refreshTTL.Seconds()), User: user, Permissions: permissions}, nil
 }
 
 func (s *PlatformService) Refresh(ctx context.Context, rawToken, userAgent string) (PlatformSession, error) {
@@ -95,7 +103,7 @@ func (s *PlatformService) Refresh(ctx context.Context, rawToken, userAgent strin
 	if err != nil {
 		return PlatformSession{}, err
 	}
-	access, err := s.jwt.SignPlatformAccess(user.ID, user.PermVersion)
+	access, err := s.jwt.SignPlatformAccess(user.ID, user.PermVersion, user.SessionID)
 	if err != nil {
 		return PlatformSession{}, err
 	}
@@ -103,7 +111,7 @@ func (s *PlatformService) Refresh(ctx context.Context, rawToken, userAgent strin
 	if err != nil {
 		return PlatformSession{}, err
 	}
-	return PlatformSession{AccessToken: access, RefreshToken: refresh, ExpiresIn: int(s.jwt.TTL().Seconds()), User: user, Permissions: permissions}, nil
+	return PlatformSession{AccessToken: access, RefreshToken: refresh, SessionID: user.SessionID, ExpiresIn: int(s.jwt.TTL().Seconds()), IdleTimeout: int(s.refreshTTL.Seconds()), User: user, Permissions: permissions}, nil
 }
 
 func (s *PlatformService) Logout(ctx context.Context, rawToken string) error {
