@@ -39,6 +39,7 @@ func RequireTenantAuth(jwtService *auth.JWTService, repository auth.Repository, 
 		refreshCookie, _ := c.Cookie(constants.RefreshCookieName)
 		active, cookieMatches, err := repository.TouchTenantSession(c.Request.Context(), claims.SessionID, user.ID, user.CompanyID, auth.HashRefreshToken(refreshCookie), time.Now().Add(idleTimeout))
 		if err != nil {
+			logInternalError(c, "validate session", err)
 			writeError(c, http.StatusInternalServerError, "internal_error", "Unable to validate session")
 			c.Abort()
 			return
@@ -54,6 +55,7 @@ func RequireTenantAuth(jwtService *auth.JWTService, repository auth.Repository, 
 		}
 		permissions, err := repository.ListPermissions(c.Request.Context(), user.ID, user.CompanyID)
 		if err != nil {
+			logInternalError(c, "load permissions", err)
 			writeError(c, http.StatusInternalServerError, "internal_error", "Unable to load permissions")
 			c.Abort()
 			return

@@ -83,6 +83,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			writeError(c, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 			return
 		}
+		logInternalError(c, "sign in", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
@@ -115,6 +116,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		rawToken = c.GetHeader("X-Refresh-Token")
 	}
 	if err := h.service.Logout(c.Request.Context(), rawToken); err != nil {
+		logInternalError(c, "sign out", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign out")
 		return
 	}
@@ -193,7 +195,12 @@ func currentUser(c *gin.Context) (auth.User, bool) {
 }
 
 func writeError(c *gin.Context, status int, code, message string) {
-	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
+	c.Set(errorCodeKey, code)
+	errorBody := gin.H{"code": code, "message": message}
+	if requestID, exists := c.Get(requestIDKey); exists {
+		errorBody["request_id"] = requestID
+	}
+	c.JSON(status, gin.H{"error": errorBody})
 }
 
 func actorFromPermissions(user auth.User, permissions []auth.Permission) rbac.Actor {

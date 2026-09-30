@@ -344,6 +344,7 @@ func (h *PeopleHandler) error(c *gin.Context, err error) {
 	case errors.Is(err, people.ErrConflict), errors.Is(err, people.ErrLastSuperAdmin):
 		writeError(c, 409, "conflict", err.Error())
 	default:
+		logInternalError(c, "manage people or roles", err)
 		writeError(c, 500, "internal_error", "Unable to manage people or roles")
 	}
 }

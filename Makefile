@@ -1,4 +1,4 @@
-.PHONY: help setup docker-start infra infra-down migrate dev backend frontend
+.PHONY: help setup docker-start infra infra-down migrate dev backend frontend logs
 
 API_DIR := productionlineflow-api
 FRONTEND_DIR := productionlineflow-frontend
@@ -12,6 +12,7 @@ help:
 	@echo "  make migrate   Apply database migrations and development seed data"
 	@echo "  make dev       Run backend and web frontend together"
 	@echo "  make backend   Run the backend API"
+	@echo "  make logs      Follow backend API logs"
 	@echo "  make frontend Run the web frontend"
 
 setup:
@@ -76,6 +77,9 @@ migrate: infra
 
 backend:
 	docker compose -f $(API_DIR)/docker-compose.yml up --build api
+
+logs:
+	docker compose -f $(API_DIR)/docker-compose.yml logs --follow --tail=100 api
 
 frontend:
 	cd $(FRONTEND_DIR) && pnpm --filter @warehouse/web dev

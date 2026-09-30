@@ -19,7 +19,7 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	}
 
 	r := gin.New()
-	r.Use(gin.Recovery(), corsMiddleware(cfg))
+	r.Use(requestLogging(), gin.Recovery(), corsMiddleware(cfg))
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})

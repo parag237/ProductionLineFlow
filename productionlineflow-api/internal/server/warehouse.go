@@ -128,6 +128,7 @@ func (h *WarehouseHandler) error(c *gin.Context, err error) {
 	case errors.Is(err, warehouse.ErrNotFound):
 		writeError(c, 404, "warehouse_not_found", "Warehouse not found")
 	default:
+		logInternalError(c, "manage warehouse", err)
 		writeError(c, 500, "internal_error", "Unable to manage warehouse")
 	}
 }

@@ -57,6 +57,7 @@ func (h *PlatformHandler) Login(c *gin.Context) {
 			writeError(c, http.StatusUnauthorized, "invalid_platform_credentials", "Invalid credentials")
 			return
 		}
+		logInternalError(c, "platform sign in", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
@@ -83,6 +84,7 @@ func (h *PlatformHandler) Refresh(c *gin.Context) {
 func (h *PlatformHandler) Logout(c *gin.Context) {
 	rawToken, _ := c.Cookie(constants.PlatformRefreshCookieName)
 	if err := h.service.Logout(c.Request.Context(), rawToken); err != nil {
+		logInternalError(c, "platform sign out", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign out")
 		return
 	}
@@ -142,7 +144,8 @@ func (h *PlatformHandler) CreateCompany(c *gin.Context) {
 			writeError(c, http.StatusConflict, "duplicate_super_admin_email", "Super Admin email already exists for this company")
 			return
 		}
-		writeError(c, http.StatusConflict, "company_creation_failed", "Unable to create company")
+		logInternalError(c, "create company", err)
+		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to create company")
 		return
 	}
 	c.JSON(http.StatusCreated, result)
@@ -244,6 +247,7 @@ func (h *PlatformHandler) writeCompanyError(c *gin.Context, err error) {
 	case errors.Is(err, company.ErrDuplicateSlug):
 		writeError(c, http.StatusConflict, "duplicate_company_slug", "Company slug already exists")
 	default:
+		logInternalError(c, "manage company", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to manage company")
 	}
 }
@@ -285,6 +289,7 @@ func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRe
 		refreshCookie, _ := c.Cookie(constants.PlatformRefreshCookieName)
 		active, cookieMatches, err := repository.TouchPlatformSession(c.Request.Context(), claims.SessionID, user.ID, auth.HashRefreshToken(refreshCookie), time.Now().Add(idleTimeout))
 		if err != nil {
+			logInternalError(c, "validate platform session", err)
 			writeError(c, http.StatusInternalServerError, "internal_error", "Unable to validate platform session")
 			c.Abort()
 			return
@@ -300,6 +305,7 @@ func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRe
 		}
 		permissions, err := repository.ListPlatformPermissions(c.Request.Context(), user.ID)
 		if err != nil {
+			logInternalError(c, "load platform permissions", err)
 			writeError(c, http.StatusInternalServerError, "internal_error", "Unable to load platform permissions")
 			c.Abort()
 			return
