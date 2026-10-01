@@ -15,15 +15,20 @@ func TestLoadUsesAPPENVAndCONFIGDIRForPreprod(t *testing.T) {
 
 	oldEnv := os.Getenv("APP_ENV")
 	oldDir := os.Getenv("CONFIG_DIR")
+	oldPort := os.Getenv("PORT")
 	defer func() {
 		_ = os.Setenv("APP_ENV", oldEnv)
 		_ = os.Setenv("CONFIG_DIR", oldDir)
+		_ = os.Setenv("PORT", oldPort)
 	}()
 
 	if err := os.Setenv("APP_ENV", "preprod"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("CONFIG_DIR", tempDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("PORT", "10000"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -34,7 +39,7 @@ func TestLoadUsesAPPENVAndCONFIGDIRForPreprod(t *testing.T) {
 	if cfg.Env != "preprod" {
 		t.Fatalf("env mismatch: got %q", cfg.Env)
 	}
-	if cfg.Server.Port != 8080 {
+	if cfg.Server.Port != 10000 {
 		t.Fatalf("port mismatch: got %d", cfg.Server.Port)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type Config struct {
@@ -81,6 +82,13 @@ func Load() (*Config, error) {
 
 	if c.Env != env {
 		return nil, fmt.Errorf("config env %q does not match APP_ENV %q", c.Env, env)
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		parsedPort, err := strconv.Atoi(port)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PORT %q: %w", port, err)
+		}
+		c.Server.Port = parsedPort
 	}
 	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
 		c.Database.DSN = dsn
