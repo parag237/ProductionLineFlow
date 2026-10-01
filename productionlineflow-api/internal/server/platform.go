@@ -250,7 +250,11 @@ func (h *PlatformHandler) writeCompanyError(c *gin.Context, err error) {
 }
 
 func makePlatformSessionResponse(session auth.PlatformSession) platformSessionResponse {
-	return platformSessionResponse{AccessToken: session.AccessToken, RefreshToken: session.RefreshToken, SessionID: session.SessionID, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, IdleTimeout: session.IdleTimeout, User: makePlatformUserResponse(session.User), Permissions: session.Permissions}
+	permissions := session.Permissions
+	if permissions == nil {
+		permissions = []string{}
+	}
+	return platformSessionResponse{AccessToken: session.AccessToken, RefreshToken: session.RefreshToken, SessionID: session.SessionID, TokenType: "Bearer", ExpiresIn: session.ExpiresIn, IdleTimeout: session.IdleTimeout, User: makePlatformUserResponse(session.User), Permissions: permissions}
 }
 
 func makePlatformUserResponse(user auth.PlatformUser) platformUserResponse {

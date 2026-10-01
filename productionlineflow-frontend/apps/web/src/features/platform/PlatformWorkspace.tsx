@@ -28,7 +28,7 @@ export default function PlatformWorkspace({ user, permissions, onLogout }: { use
     setCompaniesLoading(true);
     try {
       const result = await platformRequest<{ companies: PlatformCompany[] }>('/companies');
-      setCompanies(result.companies);
+      setCompanies(result.companies ?? []);
     } finally {
       setCompaniesLoading(false);
     }

@@ -1,4 +1,4 @@
-.PHONY: help setup docker-start infra infra-down migrate db dev backend frontend logs
+.PHONY: help setup docker-start infra infra-down migrate db dev dev-config backend backend-config frontend logs
 
 API_DIR := productionlineflow-api
 FRONTEND_DIR := productionlineflow-frontend
@@ -12,7 +12,9 @@ help:
 	@echo "  make migrate   Apply database migrations and development seed data"
 	@echo "  make db        Open an interactive PostgreSQL shell"
 	@echo "  make dev       Run backend and web frontend together"
+	@echo "  make dev-config Run config-driven backend and web frontend together"
 	@echo "  make backend   Run the backend API"
+	@echo "  make backend-config Run API directly using the selected JSON config DSN"
 	@echo "  make logs      Follow backend API logs"
 	@echo "  make frontend Run the web frontend"
 
@@ -82,6 +84,16 @@ db: docker-start
 
 backend:
 	docker compose -f $(API_DIR)/docker-compose.yml up --build api
+
+backend-config:
+	cd $(API_DIR) && env -u DATABASE_DSN APP_ENV=$${APP_ENV:-dev} CONFIG_DIR=$${CONFIG_DIR:-./config} go run ./cmd/api
+
+dev-config:
+	@set -e; \
+	(cd $(API_DIR) && env -u DATABASE_DSN APP_ENV=$${APP_ENV:-dev} CONFIG_DIR=$${CONFIG_DIR:-./config} go run ./cmd/api) & api_pid=$$!; \
+	(cd $(FRONTEND_DIR) && pnpm --filter @warehouse/web dev) & frontend_pid=$$!; \
+	trap 'kill $$api_pid $$frontend_pid 2>/dev/null || true; wait 2>/dev/null || true' INT TERM EXIT; \
+	wait $$api_pid
 
 logs:
 	docker compose -f $(API_DIR)/docker-compose.yml logs --follow --tail=100 api

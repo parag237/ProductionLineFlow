@@ -79,7 +79,7 @@ func (r *PostgresRepository) ListCompanies(ctx context.Context) ([]Company, erro
 		return nil, err
 	}
 	defer rows.Close()
-	var companies []Company
+	companies := make([]Company, 0)
 	for rows.Next() {
 		var item Company
 		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.Status, &item.SuspendedAt, &item.ActivatedAt); err != nil {
