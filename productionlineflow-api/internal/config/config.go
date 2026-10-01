@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type Config struct {
@@ -56,8 +57,8 @@ func Load() (*Config, error) {
 	if env == "" {
 		env = "dev"
 	}
-	if env != "dev" && env != "test" && env != "prod" {
-		return nil, fmt.Errorf("invalid APP_ENV %q (want dev|test|prod)", env)
+	if env != "dev" && env != "test" && env != "preprod" && env != "prod" {
+		return nil, fmt.Errorf("invalid APP_ENV %q (want dev|test|preprod|prod)", env)
 	}
 
 	dir := os.Getenv("CONFIG_DIR")
@@ -81,6 +82,13 @@ func Load() (*Config, error) {
 
 	if c.Env != env {
 		return nil, fmt.Errorf("config env %q does not match APP_ENV %q", c.Env, env)
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		parsedPort, err := strconv.Atoi(port)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PORT %q: %w", port, err)
+		}
+		c.Server.Port = parsedPort
 	}
 	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
 		c.Database.DSN = dsn

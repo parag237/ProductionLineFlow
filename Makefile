@@ -1,5 +1,15 @@
 .PHONY: help setup docker-start infra infra-down migrate db dev dev-config backend backend-config frontend logs
 
+APP_ENV_FROM_ENV := $(APP_ENV)
+-include .env
+ifneq ($(APP_ENV_FROM_ENV),)
+APP_ENV := $(APP_ENV_FROM_ENV)
+endif
+APP_ENV ?= dev
+CONFIG_DIR ?= ./config
+VITE_API_BASE_URL ?= http://localhost:8080/api/v1
+export APP_ENV CONFIG_DIR VITE_API_BASE_URL
+
 API_DIR := productionlineflow-api
 FRONTEND_DIR := productionlineflow-frontend
 
