@@ -56,8 +56,8 @@ func Load() (*Config, error) {
 	if env == "" {
 		env = "dev"
 	}
-	if env != "dev" && env != "test" && env != "prod" {
-		return nil, fmt.Errorf("invalid APP_ENV %q (want dev|test|prod)", env)
+	if env != "dev" && env != "test" && env != "preprod" && env != "prod" {
+		return nil, fmt.Errorf("invalid APP_ENV %q (want dev|test|preprod|prod)", env)
 	}
 
 	dir := os.Getenv("CONFIG_DIR")
