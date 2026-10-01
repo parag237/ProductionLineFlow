@@ -439,7 +439,7 @@ func (r *PostgresRepository) TransferSuperAdmin(ctx context.Context, companyID, 
 }
 
 func (r *PostgresRepository) ListRoles(ctx context.Context, companyID int64) ([]Role, error) {
-	rows, err := r.pool.Query(ctx, `SELECT r.id,r.slug,r.name,r.scope,r.is_system,p.key FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.company_id=$1 ORDER BY r.name,p.key`, companyID)
+	rows, err := r.pool.Query(ctx, `SELECT r.id,r.slug,r.name,r.scope,r.is_system,p.key FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id AND p.audience='company' WHERE r.company_id=$1 ORDER BY r.name,p.key`, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +467,7 @@ func (r *PostgresRepository) ListRoles(ctx context.Context, companyID int64) ([]
 }
 
 func (r *PostgresRepository) ListPermissionCatalog(ctx context.Context) ([]Permission, error) {
-	rows, err := r.pool.Query(ctx, `SELECT key, description FROM permissions WHERE key NOT IN ('admins.manage','roles.manage') ORDER BY key`)
+	rows, err := r.pool.Query(ctx, `SELECT key, description, audience FROM permissions WHERE audience='company' AND key NOT IN ('admins.manage','roles.manage') ORDER BY key`)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (r *PostgresRepository) ListPermissionCatalog(ctx context.Context) ([]Permi
 	items := make([]Permission, 0)
 	for rows.Next() {
 		var item Permission
-		if err := rows.Scan(&item.Key, &item.Description); err != nil {
+		if err := rows.Scan(&item.Key, &item.Description, &item.Audience); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -516,7 +516,7 @@ func replacePermissions(ctx context.Context, tx pgx.Tx, roleID int64, keys []str
 		return err
 	}
 	for _, key := range keys {
-		tag, err := tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE key=$2 ON CONFLICT DO NOTHING`, roleID, key)
+		tag, err := tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE key=$2 AND audience='company' ON CONFLICT DO NOTHING`, roleID, key)
 		if err != nil {
 			return err
 		}
@@ -534,12 +534,16 @@ func (r *PostgresRepository) UpdateRole(ctx context.Context, companyID, id int64
 	}
 	defer tx.Rollback(ctx)
 	var system bool
-	if err := tx.QueryRow(ctx, `SELECT is_system FROM roles WHERE id=$1 AND company_id=$2 FOR UPDATE`, id, companyID).Scan(&system); errors.Is(err, pgx.ErrNoRows) {
+	var slug string
+	if err := tx.QueryRow(ctx, `SELECT is_system,slug FROM roles WHERE id=$1 AND company_id=$2 FOR UPDATE`, id, companyID).Scan(&system, &slug); errors.Is(err, pgx.ErrNoRows) {
 		return Role{}, ErrNotFound
 	} else if err != nil {
 		return Role{}, err
 	}
-	if system {
+	if system && slug == "super_admin" {
+		return Role{}, ErrForbidden
+	}
+	if system && input.Name != nil {
 		return Role{}, ErrForbidden
 	}
 	if input.Name != nil {
@@ -547,7 +551,29 @@ func (r *PostgresRepository) UpdateRole(ctx context.Context, companyID, id int64
 			return Role{}, writeError(err)
 		}
 	}
-	if err := replacePermissions(ctx, tx, id, input.Permissions); err != nil {
+	permissions := append([]string(nil), input.Permissions...)
+	if system {
+		rows, err := tx.Query(ctx, `SELECT p.key FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=$1`, id)
+		if err != nil {
+			return Role{}, err
+		}
+		for rows.Next() {
+			var key string
+			if err := rows.Scan(&key); err != nil {
+				rows.Close()
+				return Role{}, err
+			}
+			if protectedRolePermission(key) {
+				permissions = append(permissions, key)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return Role{}, err
+		}
+		rows.Close()
+	}
+	if err := replacePermissions(ctx, tx, id, permissions); err != nil {
 		return Role{}, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE users u SET perm_version=perm_version+1 WHERE EXISTS(SELECT 1 FROM user_role_assignments a WHERE a.user_id=u.id AND a.company_id=$1 AND a.role_id=$2)`, companyID, id); err != nil {

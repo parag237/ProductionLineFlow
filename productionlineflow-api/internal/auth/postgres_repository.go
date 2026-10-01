@@ -48,7 +48,7 @@ func (r *PostgresRepository) ListPermissions(ctx context.Context, userID, compan
         JOIN roles ON roles.id = ura.role_id AND roles.company_id = ura.company_id
         JOIN role_permissions rp ON rp.role_id = roles.id
         JOIN permissions p ON p.id = rp.permission_id
-        WHERE ura.user_id = $1 AND ura.company_id = $2
+        WHERE ura.user_id = $1 AND ura.company_id = $2 AND p.audience = 'company'
         ORDER BY p.key, ura.warehouse_id
     `, userID, companyID)
 	if err != nil {
@@ -154,7 +154,9 @@ func (r *PostgresRepository) RotateRefreshToken(ctx context.Context, oldHash, ne
 	}
 	var sessionDeadline time.Time
 	if err := tx.QueryRow(ctx, `UPDATE tenant_auth_sessions SET last_activity_at=GREATEST(last_activity_at,clock_timestamp()), idle_expires_at=GREATEST(idle_expires_at,$2) WHERE id=$1 AND revoked_at IS NULL AND idle_expires_at>clock_timestamp() RETURNING idle_expires_at`, sessionID, expiresAt).Scan(&sessionDeadline); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) { return User{}, ErrRefreshInvalid }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrRefreshInvalid
+		}
 		return User{}, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET expires_at=$2 WHERE id=$1`, newTokenID, sessionDeadline); err != nil {
@@ -238,9 +240,9 @@ func (r *PostgresRepository) ListPlatformPermissions(ctx context.Context, userID
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT p.key
 		FROM platform_user_role_assignments ura
-		JOIN platform_role_permissions rp ON rp.platform_role_id = ura.platform_role_id
-		JOIN permissions p ON p.id = rp.permission_id
-		WHERE ura.platform_user_id = $1
+        JOIN platform_role_permissions rp ON rp.platform_role_id = ura.platform_role_id
+        JOIN permissions p ON p.id = rp.permission_id
+        WHERE ura.platform_user_id = $1 AND p.audience = 'platform'
 		ORDER BY p.key
 	`, userID)
 	if err != nil {
@@ -333,7 +335,9 @@ func (r *PostgresRepository) RotatePlatformRefreshToken(ctx context.Context, old
 	}
 	var sessionDeadline time.Time
 	if err := tx.QueryRow(ctx, `UPDATE platform_auth_sessions SET last_activity_at=GREATEST(last_activity_at,clock_timestamp()), idle_expires_at=GREATEST(idle_expires_at,$2) WHERE id=$1 AND revoked_at IS NULL AND idle_expires_at>clock_timestamp() RETURNING idle_expires_at`, sessionID, expiresAt).Scan(&sessionDeadline); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) { return PlatformUser{}, ErrPlatformRefreshInvalid }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PlatformUser{}, ErrPlatformRefreshInvalid
+		}
 		return PlatformUser{}, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE platform_refresh_tokens SET expires_at=$2 WHERE id=$1`, newTokenID, sessionDeadline); err != nil {

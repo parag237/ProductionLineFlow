@@ -43,7 +43,7 @@ export type Warehouse = { id: number; name: string; type_name: string; address?:
 export type Person = { id: number; name: string; email: string; is_active: boolean; assignments: Assignment[] };
 export type Assignment = { id: number; role_id: number; role_slug: string; role_name: string; role_scope: string; warehouse_id: number | null; warehouse_name?: string };
 export type Role = { id: number; slug: string; name: string; scope: string; is_system: boolean; permissions: string[] };
-export type Permission = { key: string; description: string };
+export type Permission = { key: string; description: string; audience: 'company' | 'platform' };
 
 export type ApiError = Error & { code?: string; status?: number };
 

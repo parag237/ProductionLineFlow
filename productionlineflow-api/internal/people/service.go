@@ -52,6 +52,7 @@ type Role struct {
 type Permission struct {
 	Key         string `json:"key"`
 	Description string `json:"description"`
+	Audience    string `json:"audience"`
 }
 
 type AssignmentInput struct {
@@ -320,12 +321,16 @@ func validRoleInput(name, scope string, permissions []string) bool {
 	}
 	seen := map[string]bool{}
 	for _, permission := range permissions {
-		if strings.TrimSpace(permission) == "" || seen[permission] || permission == constants.PermissionAdminsManage || permission == constants.PermissionRolesManage {
+		if strings.TrimSpace(permission) == "" || seen[permission] || protectedRolePermission(permission) {
 			return false
 		}
 		seen[permission] = true
 	}
 	return true
+}
+
+func protectedRolePermission(permission string) bool {
+	return permission == constants.PermissionAdminsManage || permission == constants.PermissionRolesManage
 }
 
 func (s *Service) CreateRole(ctx context.Context, actor rbac.Actor, input RoleInput) (Role, error) {
@@ -353,7 +358,7 @@ func (s *Service) UpdateRole(ctx context.Context, actor rbac.Actor, id int64, in
 		return Role{}, ErrInvalidInput
 	}
 	for _, permission := range input.Permissions {
-		if permission == constants.PermissionAdminsManage || permission == constants.PermissionRolesManage {
+		if protectedRolePermission(permission) {
 			return Role{}, ErrInvalidInput
 		}
 	}
