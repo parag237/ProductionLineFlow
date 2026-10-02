@@ -9,6 +9,7 @@ import (
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/constants"
+	itemsModule "productionlineflow-api/internal/items"
 	"productionlineflow-api/internal/people"
 	"productionlineflow-api/internal/rbac"
 	warehouseModule "productionlineflow-api/internal/warehouse"
@@ -25,6 +26,8 @@ type Dependencies struct {
 	Company            *company.Service
 	Warehouse          *warehouseModule.Service
 	People             *people.Service
+	Items              *itemsModule.Service
+	Production         *itemsModule.ProductionService
 	SecureCookie       bool
 }
 

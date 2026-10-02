@@ -409,6 +409,71 @@ form.form-submitted label:has(input:user-invalid)::after {
   font-size: 0.76rem;
 }
 
+.item-summary {
+  min-width: 0;
+  flex: 1;
+}
+
+.item-summary ol,
+.production-steps {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.8rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.item-step-fields {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.production-run-row {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.production-run-heading,
+.production-unit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.production-run-heading > div,
+.production-unit-row > span {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.production-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+}
+
+.production-steps .step-complete {
+  color: #4c745c;
+}
+
+.production-units {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.production-unit-row {
+  padding: 0.65rem 0;
+  border-top: 1px solid rgba(58, 83, 70, 0.12);
+}
+
+.production-unit-row small {
+  color: #6d7c74;
+}
+
 .directory-toolbar {
   display: flex;
   justify-content: space-between;
@@ -663,6 +728,17 @@ button, input, select { font: inherit; }
   .warehouse-row {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  .item-step-fields {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .production-run-heading,
+  .production-unit-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .warehouse-row > div:first-child {

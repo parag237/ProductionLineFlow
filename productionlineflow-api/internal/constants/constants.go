@@ -16,6 +16,10 @@ const (
 	PermissionWarehouseMembersManage = "warehouse.members.manage"
 	PermissionWarehouseView          = "warehouse.view"
 	PermissionWarehousesManage       = "warehouses.manage"
+	PermissionItemsView              = "items.view"
+	PermissionItemsManage            = "items.manage"
+	PermissionProductionView         = "production.view"
+	PermissionProductionExecute      = "production.execute"
 
 	UserContextKey                = "auth.user"
 	PermissionsContextKey         = "auth.permissions"

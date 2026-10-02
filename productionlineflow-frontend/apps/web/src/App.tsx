@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { refreshTenantSession, request } from './api/client';
 import { clearRefreshToken, endIdleSession, isLoginRoute, redirectToLogin, setTenantAccessToken } from './api/session';
 import LoginView from './features/auth/LoginView';
+import ItemDashboard from './features/items/ItemDashboard';
 import PeopleDashboard from './features/people/PeopleDashboard';
 import PlatformApp from './features/platform/PlatformApp';
 import WarehouseDashboard from './features/warehouses/WarehouseDashboard';
@@ -17,6 +18,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showWarehouses, setShowWarehouses] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  const [showItems, setShowItems] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -64,7 +66,7 @@ export default function App() {
     return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(normalizePermissions(session.permissions)); }} />;
   }
   return <>
-    <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople ? () => { setShowWarehouses(false); setShowPeople(false); } : undefined} />
-    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} />}
+    <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople || showItems ? () => { setShowWarehouses(false); setShowPeople(false); setShowItems(false); } : undefined} />
+    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : showItems ? <ItemDashboard permissions={permissions} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} onOpenItems={() => setShowItems(true)} />}
   </>;
 }
