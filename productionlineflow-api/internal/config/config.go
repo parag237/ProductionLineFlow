@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -89,6 +90,14 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid PORT %q: %w", port, err)
 		}
 		c.Server.Port = parsedPort
+	}
+	if origins := os.Getenv("ALLOWED_ORIGINS"); origins != "" {
+		c.Server.AllowedOrigins = nil
+		for _, origin := range strings.Split(origins, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				c.Server.AllowedOrigins = append(c.Server.AllowedOrigins, origin)
+			}
+		}
 	}
 	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
 		c.Database.DSN = dsn

@@ -16,10 +16,12 @@ func TestLoadUsesAPPENVAndCONFIGDIRForPreprod(t *testing.T) {
 	oldEnv := os.Getenv("APP_ENV")
 	oldDir := os.Getenv("CONFIG_DIR")
 	oldPort := os.Getenv("PORT")
+	oldAllowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	defer func() {
 		_ = os.Setenv("APP_ENV", oldEnv)
 		_ = os.Setenv("CONFIG_DIR", oldDir)
 		_ = os.Setenv("PORT", oldPort)
+		_ = os.Setenv("ALLOWED_ORIGINS", oldAllowedOrigins)
 	}()
 
 	if err := os.Setenv("APP_ENV", "preprod"); err != nil {
@@ -29,6 +31,9 @@ func TestLoadUsesAPPENVAndCONFIGDIRForPreprod(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("PORT", "10000"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("ALLOWED_ORIGINS", "https://productionlineflow.netlify.app, https://preview.example.net"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,6 +46,9 @@ func TestLoadUsesAPPENVAndCONFIGDIRForPreprod(t *testing.T) {
 	}
 	if cfg.Server.Port != 10000 {
 		t.Fatalf("port mismatch: got %d", cfg.Server.Port)
+	}
+	if len(cfg.Server.AllowedOrigins) != 2 || cfg.Server.AllowedOrigins[0] != "https://productionlineflow.netlify.app" || cfg.Server.AllowedOrigins[1] != "https://preview.example.net" {
+		t.Fatalf("allowed origins mismatch: got %v", cfg.Server.AllowedOrigins)
 	}
 }
 
