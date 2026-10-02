@@ -1,7 +1,7 @@
 import type { ApiError, PlatformSession, SessionResponse } from '../types';
 import { getPlatformAccessToken, getRefreshToken, getTenantAccessToken, recordSessionActivity, redirectToLogin, saveRefreshToken, setPlatformAccessToken, setTenantAccessToken, startIdleSession } from './session';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 let tenantRefreshPromise: Promise<SessionResponse> | null = null;
 let platformRefreshPromise: Promise<PlatformSession> | null = null;

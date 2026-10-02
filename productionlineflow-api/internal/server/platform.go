@@ -62,6 +62,7 @@ func (h *PlatformHandler) Login(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
+	setRequestSessionID(c, session.SessionID)
 	c.JSON(http.StatusOK, makePlatformSessionResponse(session))
 }
 
@@ -76,6 +77,7 @@ func (h *PlatformHandler) Refresh(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, code, "Platform session expired")
 		return
 	}
+	setRequestSessionID(c, session.SessionID)
 	c.JSON(http.StatusOK, makePlatformSessionResponse(session))
 }
 
@@ -270,6 +272,7 @@ func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRe
 			c.Abort()
 			return
 		}
+		setRequestSessionID(c, claims.SessionID)
 		user, err := repository.FindPlatformUserByID(c.Request.Context(), claims.PlatformUserID)
 		if err != nil || !user.IsActive {
 			writeError(c, http.StatusUnauthorized, "unauthorized", "Platform authentication required")
@@ -310,6 +313,20 @@ func RequirePlatformAuth(jwtService *auth.JWTService, repository auth.PlatformRe
 		c.Set(constants.PlatformPermissionsContextKey, permissions)
 		c.Set(constants.PlatformActorContextKey, actor)
 		c.Next()
+	}
+}
+
+func withPlatformSessionFromAccessToken(jwtService *auth.JWTService, next gin.HandlerFunc) gin.HandlerFunc {
+	if jwtService == nil {
+		return next
+	}
+	return func(c *gin.Context) {
+		if token := bearerToken(c.GetHeader("Authorization")); token != "" {
+			if claims, err := jwtService.ValidatePlatformAccess(token); err == nil {
+				setRequestSessionID(c, claims.SessionID)
+			}
+		}
+		next(c)
 	}
 }
 

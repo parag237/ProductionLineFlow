@@ -3,10 +3,10 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log/slog"
 	"net/http"
-	"os"
 	"time"
+
+	"productionlineflow-api/internal/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,8 +16,6 @@ const (
 	requestIDKey    = "request_id"
 	errorCodeKey    = "error_code"
 )
-
-var requestLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 // requestLogging emits one structured access record for every request, including
 // requests rejected by authentication middleware. It deliberately omits headers,
@@ -35,6 +33,9 @@ func requestLogging() gin.HandlerFunc {
 		}
 		c.Set(requestIDKey, requestID)
 		c.Header(requestIDHeader, requestID)
+		requestContext := logging.WithRequestID(c.Request.Context(), requestID)
+		requestContext = logging.WithSessionID(requestContext, "anonymous")
+		c.Request = c.Request.WithContext(requestContext)
 
 		started := time.Now()
 		c.Next()
@@ -44,7 +45,6 @@ func requestLogging() gin.HandlerFunc {
 			route = "unmatched"
 		}
 		attrs := []any{
-			"request_id", requestID,
 			"method", c.Request.Method,
 			"route", route,
 			"status", c.Writer.Status(),
@@ -56,13 +56,14 @@ func requestLogging() gin.HandlerFunc {
 		if len(c.Errors) > 0 {
 			attrs = append(attrs, "error_count", len(c.Errors))
 		}
+		logger := logging.FromContext(c.Request.Context())
 		switch status := c.Writer.Status(); {
 		case status >= http.StatusInternalServerError:
-			requestLogger.Error("http request", attrs...)
+			logger.Error("http request", attrs...)
 		case status >= http.StatusBadRequest:
-			requestLogger.Warn("http request", attrs...)
+			logger.Warn("http request", attrs...)
 		default:
-			requestLogger.Info("http request", attrs...)
+			logger.Info("http request", attrs...)
 		}
 	}
 }
@@ -71,12 +72,14 @@ func logInternalError(c *gin.Context, operation string, err error) {
 	if err == nil {
 		return
 	}
-	requestID, _ := c.Get(requestIDKey)
-	requestLogger.Error("request operation failed",
-		"request_id", requestID,
+	logging.FromContext(c.Request.Context()).Error("request operation failed",
 		"method", c.Request.Method,
 		"route", c.FullPath(),
 		"operation", operation,
 		"error", err,
 	)
+}
+
+func setRequestSessionID(c *gin.Context, sessionID string) {
+	c.Request = c.Request.WithContext(logging.WithSessionID(c.Request.Context(), sessionID))
 }
