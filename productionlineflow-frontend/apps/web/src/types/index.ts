@@ -40,6 +40,13 @@ export type MeResponse = {
   permissions: Permissions;
 };
 export type Warehouse = { id: number; name: string; type_name: string; address?: string; state: string; created_at: string };
+export type ItemStep = { id: number; position: number; title: string; instructions?: string };
+export type Item = { id: number; name: string; sku?: string; description?: string; is_active: boolean; created_at: string; updated_at: string; steps: ItemStep[] };
+export type ItemStepInput = { title: string; instructions: string };
+export type ProductionRunStep = { id: number; position: number; title: string; instructions?: string };
+export type ProductionUnit = { id: number; serial_number: string; status: 'in_progress' | 'completed' | 'cancelled' };
+export type ProductionStepEvent = { id: number; run_step_id: number; unit_id?: number; event: 'started' | 'completed'; actor_id: number; note?: string; created_at: string };
+export type ProductionRun = { id: number; item_id: number; item_name: string; tracking_mode: 'batch' | 'unit'; quantity: number; status: 'in_progress' | 'completed' | 'cancelled'; created_by: number; started_at: string; completed_at?: string; steps: ProductionRunStep[]; units: ProductionUnit[]; events: ProductionStepEvent[] };
 export type Person = { id: number; name: string; email: string; is_active: boolean; assignments: Assignment[] };
 export type Assignment = { id: number; role_id: number; role_slug: string; role_name: string; role_scope: string; warehouse_id: number | null; warehouse_name?: string };
 export type Role = { id: number; slug: string; name: string; scope: string; is_system: boolean; permissions: string[] };

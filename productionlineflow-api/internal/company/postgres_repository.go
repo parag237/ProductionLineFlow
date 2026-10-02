@@ -45,8 +45,8 @@ func (r *PostgresRepository) CreateCompany(ctx context.Context, input Input, pas
 		roleIDs[role.slug] = id
 	}
 	defaults := map[string][]string{
-		"super_admin": {"admins.manage", "roles.manage", "users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
-		"admin":       {"users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
+		"super_admin": {"admins.manage", "roles.manage", "users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute", "items.view", "items.manage", "production.view", "production.execute"},
+		"admin":       {"users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute", "items.view", "items.manage", "production.view", "production.execute"},
 		"manager":     {"warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
 		"worker":      {"warehouse.view", "workers.tasks.execute"},
 	}

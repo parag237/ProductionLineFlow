@@ -108,6 +108,7 @@ func registerTenantRoutes(versioned *gin.RouterGroup, deps *Dependencies, authHa
 	})
 	registerWarehouseRoutes(secured, deps)
 	registerPeopleRoutes(secured, deps)
+	registerItemRoutes(secured, deps)
 }
 
 func registerWarehouseRoutes(secured *gin.RouterGroup, deps *Dependencies) {
@@ -139,6 +140,26 @@ func registerPeopleRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 		secured.POST("/roles", peopleHandler.CreateRole)
 		secured.PATCH("/roles/:id", peopleHandler.UpdateRole)
 		secured.DELETE("/roles/:id", peopleHandler.DeleteRole)
+	}
+}
+
+func registerItemRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || (deps.Items == nil && deps.Production == nil) {
+		return
+	}
+	handler := NewItemHandler(deps.Items, deps.Production)
+	if deps.Items != nil {
+		secured.GET("/items", handler.List)
+		secured.POST("/items", handler.Create)
+		secured.GET("/items/:id", handler.Get)
+		secured.PATCH("/items/:id", handler.Update)
+		secured.DELETE("/items/:id", handler.Archive)
+	}
+	if deps.Production != nil {
+		secured.GET("/production/runs", handler.ListRuns)
+		secured.POST("/production/runs", handler.CreateRun)
+		secured.GET("/production/runs/:runID", handler.GetRun)
+		secured.POST("/production/runs/:runID/steps/:stepID/complete", handler.CompleteStep)
 	}
 }
 

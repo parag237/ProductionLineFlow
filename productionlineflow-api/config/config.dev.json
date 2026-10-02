@@ -1,7 +1,7 @@
 {
   "env": "dev",
   "server": {"port": 8080, "read_timeout_sec": 15, "write_timeout_sec": 30, "allowed_origins": ["http://localhost:5173", "http://localhost:5176"]},
-  "database": {"dsn": "postgresql://neondb_owner:npg_jZr0b9ngsdfE@ep-crimson-snow-b4y591z9-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require", "max_conns": 10},
+  "database": {"dsn": "postgres://app:app@localhost:5432/warehouse_test?sslmode=disable", "max_conns": 10},
   "redis": {"addr": "localhost:6379", "db": 0},
   "auth": {"jwt_secret": "dev-only-secret", "jwt_issuer": "productionlineflow-api", "access_ttl_min": 15, "refresh_ttl_hours": 168, "min_password_length": 10},
   "flows": {"session_ttl_min": 60},
