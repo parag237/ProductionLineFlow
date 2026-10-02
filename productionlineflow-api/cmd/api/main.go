@@ -4,21 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"productionlineflow-api/internal/auth"
-	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/config"
 	"productionlineflow-api/internal/logging"
-	"productionlineflow-api/internal/people"
 	database "productionlineflow-api/internal/platform/db"
-	"productionlineflow-api/internal/server"
-	warehouseModule "productionlineflow-api/internal/warehouse"
 )
 
 func main() {
@@ -53,48 +47,12 @@ func run() error {
 	}()
 	logger.Info("database connected", "max_connections", cfg.Database.MaxConns)
 
-	repository := auth.NewPostgresRepository(pool)
-	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret, time.Duration(cfg.Auth.AccessTTLMin)*time.Minute, cfg.Auth.JWTIssuer)
-	refreshTTL := time.Duration(cfg.Auth.RefreshTTLHours) * time.Hour
-	minPasswordLength := cfg.Auth.MinPasswordLength
-	authService := auth.NewService(repository, jwtService, refreshTTL, minPasswordLength)
-	platformAuthService := auth.NewPlatformService(repository, jwtService, refreshTTL)
-	companyService := company.NewService(company.NewPostgresRepository(pool), minPasswordLength)
-	warehouseService := warehouseModule.NewService(warehouseModule.NewPostgresRepository(pool))
-	peopleService := people.NewService(people.NewPostgresRepository(pool), minPasswordLength)
-	r := server.NewRouter(cfg, &server.Dependencies{
-		Auth:               authService,
-		PlatformAuth:       platformAuthService,
-		JWT:                jwtService,
-		Repository:         repository,
-		PlatformRepository: repository,
-		Company:            companyService,
-		Warehouse:          warehouseService,
-		People:             peopleService,
-		SecureCookie:       cfg.Env == "prod",
-	})
-	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      r,
-		ReadTimeout:  time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
-		WriteTimeout: time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
-	}
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	listener, err := net.Listen("tcp", httpServer.Addr)
+	httpServer, serverErrors, err := startHTTPServer(cfg, pool, logger)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", httpServer.Addr, err)
+		return err
 	}
-	serverErrors := make(chan error, 1)
-	go func() {
-		serverErrors <- httpServer.Serve(listener)
-	}()
-	logger.Info("HTTP server listening",
-		"address", httpServer.Addr,
-		"port", cfg.Server.Port,
-		"read_timeout", httpServer.ReadTimeout,
-		"write_timeout", httpServer.WriteTimeout,
-	)
 
 	select {
 	case err := <-serverErrors:
