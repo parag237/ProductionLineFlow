@@ -21,24 +21,37 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	r := gin.New()
 	r.Use(requestLogging(), gin.Recovery(), corsMiddleware(cfg))
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-
 	v1 := r.Group("/api/v1")
-	v1.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+	registerHealthRoutes(r, v1)
+	registerPlatformRoutes(r, v1, deps)
+	authHandler := registerTenantAuthRoutes(r, v1, deps)
+	registerTenantRoutes(v1, deps, authHandler)
+	return r
+}
+
+func registerHealthRoutes(root *gin.Engine, versioned *gin.RouterGroup) {
+	healthHandler := func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+	root.GET("/", healthHandler)
+	root.HEAD("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
 	})
-	platform := v1.Group("/platform")
-	if deps == nil || deps.PlatformAuth == nil {
-		platform.POST("/auth/login", authUnavailable)
-		platform.POST("/auth/refresh", authUnavailable)
-		platform.POST("/auth/logout", authUnavailable)
-	} else {
-		platformHandler := NewPlatformHandler(deps.PlatformAuth, deps.Company, deps.SecureCookie)
-		platform.POST("/auth/login", platformHandler.Login)
-		platform.POST("/auth/refresh", platformHandler.Refresh)
-		platform.POST("/auth/logout", platformHandler.Logout)
+	root.GET("/health", healthHandler)
+	versioned.GET("/health", healthHandler)
+}
+
+func registerPlatformRoutes(root gin.IRoutes, versioned *gin.RouterGroup, deps *Dependencies) {
+	platform := versioned.Group("/platform")
+	var platformHandler *PlatformHandler
+	platformLogin := gin.HandlerFunc(authUnavailable)
+	platformRefresh := gin.HandlerFunc(authUnavailable)
+	platformLogout := gin.HandlerFunc(authUnavailable)
+	if deps != nil && deps.PlatformAuth != nil {
+		platformHandler = NewPlatformHandler(deps.PlatformAuth, deps.Company, deps.SecureCookie)
+		platformLogin = platformHandler.Login
+		platformRefresh = platformHandler.Refresh
+		platformLogout = platformHandler.Logout
 		platformSecured := platform.Group("")
 		if deps.JWT != nil && deps.PlatformRepository != nil && deps.PlatformAuth != nil {
 			platformSecured.Use(RequirePlatformAuth(deps.JWT, deps.PlatformRepository, deps.PlatformAuth.RefreshTTL(), deps.SecureCookie))
@@ -50,23 +63,30 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		platformSecured.POST("/companies/:id/suspend", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.SuspendCompany)
 		platformSecured.POST("/companies/:id/reactivate", RequirePlatformPermission(constants.PermissionCompaniesManage), platformHandler.ReactivateCompany)
 	}
-	if deps == nil || deps.Auth == nil {
-		v1.POST("/auth/login", authUnavailable)
-		v1.POST("/auth/refresh", authUnavailable)
-		v1.POST("/auth/logout", authUnavailable)
-	} else {
-		authHandler := NewAuthHandler(deps.Auth, deps.SecureCookie)
-		v1.POST("/auth/login", authHandler.Login)
-		v1.POST("/auth/refresh", authHandler.Refresh)
-		v1.POST("/auth/logout", authHandler.Logout)
-	}
+	registerAuthRoutes(root, versioned, "/platform", platformLogin, platformRefresh, platformLogout)
+}
 
-	secured := v1.Group("")
+func registerTenantAuthRoutes(root gin.IRoutes, versioned *gin.RouterGroup, deps *Dependencies) *AuthHandler {
+	var authHandler *AuthHandler
+	tenantLogin := gin.HandlerFunc(authUnavailable)
+	tenantRefresh := gin.HandlerFunc(authUnavailable)
+	tenantLogout := gin.HandlerFunc(authUnavailable)
+	if deps != nil && deps.Auth != nil {
+		authHandler = NewAuthHandler(deps.Auth, deps.SecureCookie)
+		tenantLogin = authHandler.Login
+		tenantRefresh = authHandler.Refresh
+		tenantLogout = authHandler.Logout
+	}
+	registerAuthRoutes(root, versioned, "", tenantLogin, tenantRefresh, tenantLogout)
+	return authHandler
+}
+
+func registerTenantRoutes(versioned *gin.RouterGroup, deps *Dependencies, authHandler *AuthHandler) {
+	secured := versioned.Group("")
 	if deps != nil && deps.JWT != nil && deps.Repository != nil && deps.Auth != nil {
 		secured.Use(RequireTenantAuth(deps.JWT, deps.Repository, deps.Auth.RefreshTTL(), deps.SecureCookie))
 	}
-	if deps != nil && deps.Auth != nil {
-		authHandler := NewAuthHandler(deps.Auth, deps.SecureCookie)
+	if authHandler != nil {
 		secured.GET("/me", authHandler.Me)
 	} else {
 		secured.GET("/me", authUnavailable)
@@ -86,6 +106,11 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 	secured.POST("/flows/:id/events", func(c *gin.Context) {
 		c.JSON(200, gin.H{"flow_id": c.Param("id"), "state": "details"})
 	})
+	registerWarehouseRoutes(secured, deps)
+	registerPeopleRoutes(secured, deps)
+}
+
+func registerWarehouseRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 	if deps != nil && deps.Warehouse != nil {
 		warehouseHandler := NewWarehouseHandler(deps.Warehouse)
 		secured.GET("/warehouses", warehouseHandler.List)
@@ -94,6 +119,9 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		secured.PATCH("/warehouses/:id", warehouseHandler.Update)
 		secured.DELETE("/warehouses/:id", warehouseHandler.Delete)
 	}
+}
+
+func registerPeopleRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 	if deps != nil && deps.People != nil {
 		peopleHandler := NewPeopleHandler(deps.People)
 		secured.GET("/users", peopleHandler.List)
@@ -112,7 +140,16 @@ func NewRouter(cfg *config.Config, dependencySets ...*Dependencies) *gin.Engine 
 		secured.PATCH("/roles/:id", peopleHandler.UpdateRole)
 		secured.DELETE("/roles/:id", peopleHandler.DeleteRole)
 	}
-	return r
+}
+
+func registerAuthRoutes(root, versioned gin.IRoutes, prefix string, login, refresh, logout gin.HandlerFunc) {
+	authPath := prefix + "/auth"
+	root.POST(authPath+"/login", login)
+	root.POST(authPath+"/refresh", refresh)
+	root.POST(authPath+"/logout", logout)
+	versioned.POST(authPath+"/login", login)
+	versioned.POST(authPath+"/refresh", refresh)
+	versioned.POST(authPath+"/logout", logout)
 }
 
 func authUnavailable(c *gin.Context) {
