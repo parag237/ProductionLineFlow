@@ -50,8 +50,8 @@ func registerPlatformRoutes(root gin.IRoutes, versioned *gin.RouterGroup, deps *
 	if deps != nil && deps.PlatformAuth != nil {
 		platformHandler = NewPlatformHandler(deps.PlatformAuth, deps.Company, deps.SecureCookie)
 		platformLogin = platformHandler.Login
-		platformRefresh = platformHandler.Refresh
-		platformLogout = platformHandler.Logout
+		platformRefresh = withPlatformSessionFromAccessToken(deps.JWT, platformHandler.Refresh)
+		platformLogout = withPlatformSessionFromAccessToken(deps.JWT, platformHandler.Logout)
 		platformSecured := platform.Group("")
 		if deps.JWT != nil && deps.PlatformRepository != nil && deps.PlatformAuth != nil {
 			platformSecured.Use(RequirePlatformAuth(deps.JWT, deps.PlatformRepository, deps.PlatformAuth.RefreshTTL(), deps.SecureCookie))
@@ -74,8 +74,8 @@ func registerTenantAuthRoutes(root gin.IRoutes, versioned *gin.RouterGroup, deps
 	if deps != nil && deps.Auth != nil {
 		authHandler = NewAuthHandler(deps.Auth, deps.SecureCookie)
 		tenantLogin = authHandler.Login
-		tenantRefresh = authHandler.Refresh
-		tenantLogout = authHandler.Logout
+		tenantRefresh = withTenantSessionFromAccessToken(deps.JWT, authHandler.Refresh)
+		tenantLogout = withTenantSessionFromAccessToken(deps.JWT, authHandler.Logout)
 	}
 	registerAuthRoutes(root, versioned, "", tenantLogin, tenantRefresh, tenantLogout)
 	return authHandler

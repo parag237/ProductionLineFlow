@@ -88,6 +88,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "internal_error", "Unable to sign in")
 		return
 	}
+	setRequestSessionID(c, session.SessionID)
 	c.JSON(http.StatusOK, makeSessionResponse(session))
 }
 
@@ -102,6 +103,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, code, "Session expired")
 		return
 	}
+	setRequestSessionID(c, session.SessionID)
 	c.JSON(http.StatusOK, makeSessionResponse(session))
 }
 

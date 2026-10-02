@@ -25,6 +25,7 @@ func RequireTenantAuth(jwtService *auth.JWTService, repository auth.Repository, 
 			c.Abort()
 			return
 		}
+		setRequestSessionID(c, claims.SessionID)
 		user, err := repository.FindUserByID(c.Request.Context(), claims.UserID, claims.CompanyID)
 		if err != nil || !user.IsActive {
 			writeError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
@@ -65,6 +66,20 @@ func RequireTenantAuth(jwtService *auth.JWTService, repository auth.Repository, 
 		c.Set(constants.PermissionsContextKey, permissions)
 		c.Set(constants.ActorContextKey, actorFromPermissions(user, permissions))
 		c.Next()
+	}
+}
+
+func withTenantSessionFromAccessToken(jwtService *auth.JWTService, next gin.HandlerFunc) gin.HandlerFunc {
+	if jwtService == nil {
+		return next
+	}
+	return func(c *gin.Context) {
+		if token := bearerToken(c.GetHeader("Authorization")); token != "" {
+			if claims, err := jwtService.ValidateAccess(token); err == nil {
+				setRequestSessionID(c, claims.SessionID)
+			}
+		}
+		next(c)
 	}
 }
 

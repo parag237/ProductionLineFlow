@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"productionlineflow-api/internal/auth"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/config"
+	"productionlineflow-api/internal/logging"
 	"productionlineflow-api/internal/people"
 	database "productionlineflow-api/internal/platform/db"
 	"productionlineflow-api/internal/server"
@@ -24,7 +23,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("service exited with error", "error", err)
+		logging.Default().Error("service exited with error", "error", err)
 		os.Exit(1)
 	}
 }
@@ -34,11 +33,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logger, err := newLogger(cfg.Log)
+	logger, err := logging.New(cfg.Log.Level, cfg.Log.Format)
 	if err != nil {
 		return fmt.Errorf("configure logger: %w", err)
 	}
-	slog.SetDefault(logger)
+	logging.SetDefault(logger)
 	logger.Info("service starting", "environment", cfg.Env)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -118,32 +117,4 @@ func run() error {
 	}
 	logger.Info("shutdown complete")
 	return nil
-}
-
-func newLogger(cfg config.LogConfig) (*slog.Logger, error) {
-	var level slog.Level
-	switch strings.ToLower(strings.TrimSpace(cfg.Level)) {
-	case "debug":
-		level = slog.LevelDebug
-	case "info":
-		level = slog.LevelInfo
-	case "warn", "warning":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		return nil, fmt.Errorf("unsupported log level %q", cfg.Level)
-	}
-
-	options := &slog.HandlerOptions{Level: level}
-	var handler slog.Handler
-	switch strings.ToLower(strings.TrimSpace(cfg.Format)) {
-	case "json":
-		handler = slog.NewJSONHandler(os.Stdout, options)
-	case "text":
-		handler = slog.NewTextHandler(os.Stdout, options)
-	default:
-		return nil, fmt.Errorf("unsupported log format %q", cfg.Format)
-	}
-	return slog.New(handler), nil
 }
