@@ -1,3 +1,6 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  # The mobile app is an Expo scaffold that isn't deployed to Netlify. Keeping it
+  # out of the workspace lets Netlify detect the web app as the only project.
+  - '!apps/mobile'
