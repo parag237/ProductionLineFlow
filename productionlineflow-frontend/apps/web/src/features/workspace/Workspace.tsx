@@ -1,14 +1,15 @@
 import type { Permissions, User } from '../../types';
 
-export default function Workspace({ user, permissions, onOpenWarehouses, onOpenPeople, onOpenItems }: { user: User; permissions: Permissions; onOpenWarehouses: () => void; onOpenPeople: () => void; onOpenItems: () => void }) {
+export default function Workspace({ user, permissions, onOpenWarehouses, onOpenPeople, onOpenItems, onOpenOperations }: { user: User; permissions: Permissions; onOpenWarehouses: () => void; onOpenPeople: () => void; onOpenItems: () => void; onOpenOperations: () => void }) {
   const navigation = [
     { label: 'Warehouses', permission: 'warehouse.view' },
     { label: 'People & roles', permission: 'users.create' },
     { label: 'Items', permission: 'items.view' },
-    { label: 'Operations', permission: 'workers.tasks.execute' },
+    { label: 'Operations', permission: 'operations.logs.view' },
   ].filter((item) => {
     if (item.label === 'People & roles') return permissions.company.includes('users.create') || Object.values(permissions.warehouses).some((list) => list.includes('warehouse.members.manage'));
     if (item.label === 'Items') return permissions.company.includes('items.view') || permissions.company.includes('items.manage') || permissions.company.includes('production.view') || permissions.company.includes('production.execute');
+    if (item.label === 'Operations') return permissions.company.includes('operations.logs.view') || permissions.company.includes('operations.logs.create') || Object.values(permissions.warehouses).some((list) => list.includes('operations.logs.view') || list.includes('operations.logs.create'));
     if (item.permission === 'warehouse.view') return permissions.company.includes(item.permission) || Object.values(permissions.warehouses).some((list) => list.includes(item.permission));
     return permissions.company.includes(item.permission);
   });
@@ -26,7 +27,7 @@ export default function Workspace({ user, permissions, onOpenWarehouses, onOpenP
         </div>
         <div className="workspace-grid">
           {navigation.length > 0 ? navigation.map((item) => (
-            <button className="workspace-card" key={item.label} onClick={item.label === 'Warehouses' ? onOpenWarehouses : item.label === 'People & roles' ? onOpenPeople : item.label === 'Items' ? onOpenItems : undefined}>
+            <button className="workspace-card" key={item.label} onClick={item.label === 'Warehouses' ? onOpenWarehouses : item.label === 'People & roles' ? onOpenPeople : item.label === 'Items' ? onOpenItems : item.label === 'Operations' ? onOpenOperations : undefined}>
               <span className="card-arrow">↗</span>
               <span className="card-label">{item.label}</span>
               <span className="card-meta">Available to your role</span>

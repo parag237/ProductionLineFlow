@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	itemsModule "productionlineflow-api/internal/items"
+	operationsModule "productionlineflow-api/internal/operations"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +23,26 @@ func TestRouterSupportsRootAndVersionedTenantLogin(t *testing.T) {
 
 			if response.Code != http.StatusServiceUnavailable {
 				t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, response.Code)
+			}
+		})
+	}
+}
+
+func TestRouterRegistersOperationLogRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := NewRouter(nil, &Dependencies{OperationLogs: operationsModule.NewService(nil)})
+
+	for _, target := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/operation-logs/options"},
+		{http.MethodGet, "/api/v1/operation-logs?warehouse_id=1&work_date=2026-10-04"},
+		{http.MethodPost, "/api/v1/operation-logs"},
+	} {
+		t.Run(target.method+" "+target.path, func(t *testing.T) {
+			request := httptest.NewRequest(target.method, target.path, nil)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("expected registered handler status %d, got %d", http.StatusUnauthorized, response.Code)
 			}
 		})
 	}

@@ -109,6 +109,17 @@ func registerTenantRoutes(versioned *gin.RouterGroup, deps *Dependencies, authHa
 	registerWarehouseRoutes(secured, deps)
 	registerPeopleRoutes(secured, deps)
 	registerItemRoutes(secured, deps)
+	registerOperationLogRoutes(secured, deps)
+}
+
+func registerOperationLogRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || deps.OperationLogs == nil {
+		return
+	}
+	handler := NewOperationLogHandler(deps.OperationLogs)
+	secured.GET("/operation-logs/options", handler.Options)
+	secured.GET("/operation-logs", handler.List)
+	secured.POST("/operation-logs", handler.Create)
 }
 
 func registerWarehouseRoutes(secured *gin.RouterGroup, deps *Dependencies) {

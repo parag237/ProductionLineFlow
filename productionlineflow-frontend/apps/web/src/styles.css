@@ -675,6 +675,50 @@ button, input, select { font: inherit; }
 .dialog-footer button { min-height: 2.4rem; margin: 0; padding: .5rem .8rem; border-radius: .5rem; font-size: .8rem; }
 .success-message { padding: .65rem .75rem; border-radius: .5rem; color: #27623b; background: #e7f4eb; font-size: .82rem; }
 
+.operations-workspace { max-width: 1320px; padding-top: 2.5rem; }
+.operations-workspace .workspace-heading { align-items: end; }
+.operations-workspace .workspace-heading h1 { margin: .55rem 0; font-size: 2.75rem; font-weight: 650; letter-spacing: 0; line-height: 1.12; }
+.operations-workspace .workspace-heading p { margin: .5rem 0 0; font-size: .92rem; }
+.operation-log-filters { display: flex; align-items: end; gap: .75rem; }
+.operation-log-filters label { min-width: 11rem; color: #53645c; font-size: .72rem; }
+.operation-log-filters label::after { display: none; }
+.operation-log-filters select, .operation-log-filters input { min-height: 2.65rem; padding: .55rem .7rem; border: 1px solid #d3ddd7; border-radius: .45rem; background: #fff; font-size: .88rem; }
+.operation-log-layout { display: grid; grid-template-columns: minmax(280px, .78fr) minmax(0, 1.5fr); align-items: start; gap: 1rem; margin-top: 1.75rem; }
+.operation-log-layout.single-column { grid-template-columns: minmax(0, 1fr); }
+.operation-log-form-panel, .operation-log-list-panel { min-width: 0; padding: 1.2rem; border: 1px solid #e1e7e3; border-radius: .7rem; background: #fff; box-shadow: 0 2px 8px rgb(25 45 35 / 3%); }
+.operation-log-panel-heading { display: flex; align-items: end; justify-content: space-between; gap: .8rem; margin-bottom: 1rem; }
+.operation-log-panel-heading h2 { margin: .25rem 0 0; color: #24372d; font-size: 1.2rem; font-weight: 650; }
+.operation-log-form-panel form { gap: .85rem; }
+.operation-log-form-panel label { color: #46564e; font-size: .78rem; }
+.operation-log-form-panel label:has(input:required)::after { content: none; }
+.operation-log-form-panel input, .operation-log-form-panel select { min-height: 2.65rem; padding: .55rem .65rem; border: 1px solid #d3ddd7; border-radius: .45rem; background: #fff; font-size: .88rem; }
+.operation-log-form-panel input:focus, .operation-log-form-panel select:focus, .operation-log-filters input:focus, .operation-log-filters select:focus { border-color: #397354; box-shadow: 0 0 0 3px rgb(57 115 84 / 13%); outline: none; }
+.operation-log-form-panel .primary-button { justify-self: start; min-height: 2.55rem; padding: .55rem .85rem; border-radius: .45rem; font-size: .84rem; }
+.operation-log-table-wrap { overflow-x: auto; }
+.operation-log-table { width: 100%; border-collapse: collapse; text-align: left; }
+.operation-log-table th { padding: .7rem .65rem; color: #65756c; background: #f7f9f8; border-bottom: 1px solid #e5ebe7; font-size: .68rem; font-weight: 650; text-transform: uppercase; white-space: nowrap; }
+.operation-log-table td { padding: .8rem .65rem; border-bottom: 1px solid #edf0ee; color: #46564e; font-size: .83rem; }
+.operation-log-table tbody tr:last-child td { border-bottom: 0; }
+.operation-log-table td:first-child { min-width: 170px; }
+.operation-log-table td:first-child strong, .operation-log-table td:first-child span { display: block; }
+.operation-log-table td:first-child strong { color: #25372e; font-size: .86rem; font-weight: 650; }
+.operation-log-table td:first-child span { margin-top: .25rem; color: #68766f; font-size: .78rem; }
+.operation-log-table .operation-log-quantity { color: #25583e; font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.operation-log-count { color: #6b7972; font-size: .78rem; white-space: nowrap; }
+.operation-log-empty { padding: 2.5rem 1rem; color: #6b7972; background: #f8faf8; border: 1px dashed #d3ddd7; border-radius: .45rem; text-align: center; font-size: .85rem; }
+.operation-log-note { padding: .65rem .75rem; color: #68766f; background: #f5f8f6; border-left: 2px solid #a9bcb0; font-size: .78rem; }
+.operation-log-success { padding: .65rem .75rem; color: #27623b; background: #e7f4eb; border-left: 2px solid #3b8054; font-size: .82rem; }
+.operations-hub { max-width: 1180px; padding-top: 2.5rem; }
+.operations-hub .workspace-heading h1 { margin: .55rem 0; font-size: 2.75rem; font-weight: 650; letter-spacing: 0; line-height: 1.12; }
+.operations-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; margin-top: 2rem; }
+.operations-choice { min-height: 9rem; display: grid; grid-template-columns: 1fr auto; align-content: space-between; gap: .8rem; padding: 1.15rem 1.25rem; border: 1px solid #dce5df; border-radius: .55rem; color: #25372e; background: #fff; text-align: left; cursor: pointer; }
+.operations-choice:hover { border-color: #8eaa98; background: #f9fbf9; }
+.operations-choice-index { color: #a15c41; font-size: .72rem; font-weight: 700; }
+.operations-choice-name { align-self: end; font-size: 1.35rem; font-weight: 650; }
+.operations-choice-arrow { grid-column: 2; grid-row: 1 / span 2; align-self: start; color: #527563; font-size: 1.2rem; }
+.operations-analysis-empty { margin-top: 2rem; padding: 1.4rem 0; border-top: 1px solid #dfe6e2; }
+.operations-analysis-empty h2 { margin: .5rem 0; color: #46564e; font-size: 1rem; font-weight: 500; }
+
 @media (max-width: 760px) {
   .company-header { min-height: 66px; padding-right: 1rem; padding-left: 1rem; }
   .profile-name { max-width: 105px; }
@@ -758,4 +802,13 @@ button, input, select { font: inherit; }
     flex-direction: column;
   }
   .people-filters, .people-filters input, .people-filters select { width: 100%; }
+  .operations-workspace .workspace-heading { align-items: stretch; }
+  .operations-workspace .workspace-heading h1 { font-size: 2.2rem; }
+  .operation-log-filters { align-items: stretch; flex-direction: column; width: 100%; }
+  .operation-log-filters label, .operation-log-filters select, .operation-log-filters input { width: 100%; }
+  .operation-log-layout { grid-template-columns: minmax(0, 1fr); }
+  .operation-log-form-panel, .operation-log-list-panel { padding: 1rem; }
+  .operation-log-table { min-width: 620px; }
+  .operations-hub .workspace-heading h1 { font-size: 2.2rem; }
+  .operations-choice-grid { grid-template-columns: minmax(0, 1fr); }
 }

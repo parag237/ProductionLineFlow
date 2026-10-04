@@ -20,6 +20,8 @@ const (
 	PermissionItemsManage            = "items.manage"
 	PermissionProductionView         = "production.view"
 	PermissionProductionExecute      = "production.execute"
+	PermissionOperationLogsView      = "operations.logs.view"
+	PermissionOperationLogsCreate    = "operations.logs.create"
 
 	UserContextKey                = "auth.user"
 	PermissionsContextKey         = "auth.permissions"

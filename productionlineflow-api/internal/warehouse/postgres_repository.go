@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -100,6 +101,10 @@ func (r *PostgresRepository) Update(ctx context.Context, companyID, id int64, in
 func (r *PostgresRepository) Delete(ctx context.Context, companyID, id int64) error {
 	result, err := r.pool.Exec(ctx, `DELETE FROM warehouses WHERE company_id = $1 AND id = $2`, companyID, id)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return ErrConflict
+		}
 		return err
 	}
 	if result.RowsAffected() == 0 {
