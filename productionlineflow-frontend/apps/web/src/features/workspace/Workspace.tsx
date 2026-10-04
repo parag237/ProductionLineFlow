@@ -9,7 +9,7 @@ export default function Workspace({ user, permissions, onOpenWarehouses, onOpenP
   ].filter((item) => {
     if (item.label === 'People & roles') return permissions.company.includes('users.create') || Object.values(permissions.warehouses).some((list) => list.includes('warehouse.members.manage'));
     if (item.label === 'Items') return permissions.company.includes('items.view') || permissions.company.includes('items.manage') || permissions.company.includes('items.categories.view') || permissions.company.includes('items.categories.manage');
-    if (item.label === 'Operations') return permissions.company.includes('operations.logs.view') || permissions.company.includes('operations.logs.create') || Object.values(permissions.warehouses).some((list) => list.includes('operations.logs.view') || list.includes('operations.logs.create'));
+    if (item.label === 'Operations') return permissions.company.includes('operations.logs.view') || permissions.company.includes('operations.logs.create') || permissions.company.includes('operations.logs.edit') || Object.values(permissions.warehouses).some((list) => list.includes('operations.logs.view') || list.includes('operations.logs.create') || list.includes('operations.logs.edit'));
     if (item.permission === 'warehouse.view') return permissions.company.includes(item.permission) || Object.values(permissions.warehouses).some((list) => list.includes(item.permission));
     return permissions.company.includes(item.permission);
   });

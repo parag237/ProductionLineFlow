@@ -37,7 +37,7 @@ func (r *PostgresRepository) ListWarehouses(ctx context.Context, companyID int64
 
 func (r *PostgresRepository) ListCatalog(ctx context.Context, companyID int64) ([]ItemOption, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT i.id, i.name, s.id, s.title
+		SELECT i.id, i.name, i.unit_of_measure, s.id, s.title
 		FROM items i
 	JOIN item_steps s ON s.company_id = i.company_id AND s.item_id = i.id
 		WHERE i.company_id = $1 AND i.is_active
@@ -52,7 +52,7 @@ func (r *PostgresRepository) ListCatalog(ctx context.Context, companyID int64) (
 	for rows.Next() {
 		var item ItemOption
 		var step StepOption
-		if err := rows.Scan(&item.ID, &item.Name, &step.ID, &step.Title); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.UnitOfMeasure, &step.ID, &step.Title); err != nil {
 			return nil, err
 		}
 		index, exists := indices[item.ID]
@@ -95,7 +95,7 @@ func (r *PostgresRepository) ListPerformers(ctx context.Context, companyID, ware
 func (r *PostgresRepository) ListEntries(ctx context.Context, companyID int64, warehouseIDs []int64, companyWide bool, workDate string) ([]Entry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT log.id, log.warehouse_id, warehouse.name, log.work_date::TEXT,
-		       log.item_id, log.item_name, log.step_id, log.step_title, log.quantity,
+		       log.item_id, log.item_name, log.step_id, log.step_title, log.unit_of_measure, log.quantity,
 		       log.performed_by, performer.name, log.recorded_by, log.created_at::TEXT
 		FROM operation_work_logs log
 		JOIN warehouses warehouse ON warehouse.company_id = log.company_id AND warehouse.id = log.warehouse_id
@@ -109,10 +109,8 @@ func (r *PostgresRepository) ListEntries(ctx context.Context, companyID int64, w
 	defer rows.Close()
 	entries := make([]Entry, 0)
 	for rows.Next() {
-		var entry Entry
-		if err := rows.Scan(&entry.ID, &entry.WarehouseID, &entry.WarehouseName, &entry.WorkDate,
-			&entry.ItemID, &entry.ItemName, &entry.StepID, &entry.StepTitle, &entry.Quantity,
-			&entry.PerformedBy, &entry.PerformerName, &entry.RecordedBy, &entry.CreatedAt); err != nil {
+		entry, err := scanEntry(rows)
+		if err != nil {
 			return nil, err
 		}
 		entries = append(entries, entry)
@@ -120,15 +118,31 @@ func (r *PostgresRepository) ListEntries(ctx context.Context, companyID int64, w
 	return entries, rows.Err()
 }
 
+func (r *PostgresRepository) GetEntry(ctx context.Context, companyID, id int64) (Entry, error) {
+	entry, err := scanEntry(r.pool.QueryRow(ctx, `
+		SELECT log.id, log.warehouse_id, warehouse.name, log.work_date::TEXT,
+		       log.item_id, log.item_name, log.step_id, log.step_title, log.unit_of_measure, log.quantity,
+		       log.performed_by, performer.name, log.recorded_by, log.created_at::TEXT
+		FROM operation_work_logs log
+		JOIN warehouses warehouse ON warehouse.company_id = log.company_id AND warehouse.id = log.warehouse_id
+		JOIN users performer ON performer.company_id = log.company_id AND performer.id = log.performed_by
+		WHERE log.company_id = $1 AND log.id = $2
+	`, companyID, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Entry{}, ErrNotFound
+	}
+	return entry, err
+}
+
 func (r *PostgresRepository) CreateEntry(ctx context.Context, companyID, recorderID int64, input Input) (Entry, error) {
 	var entry Entry
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO operation_work_logs (
 			company_id, warehouse_id, work_date, item_id, item_name,
-			step_id, step_title, quantity, performed_by, recorded_by
+			step_id, step_title, unit_of_measure, quantity, performed_by, recorded_by
 		)
 		SELECT $1, $2, $3::DATE, item.id, item.name,
-		       step.id, step.title, $7, performer.id, $8
+		       step.id, step.title, item.unit_of_measure, $7, performer.id, $8
 		FROM items item
 		JOIN item_steps step ON step.company_id = item.company_id AND step.item_id = item.id
 		JOIN warehouses warehouse ON warehouse.company_id = item.company_id AND warehouse.id = $2
@@ -145,17 +159,65 @@ func (r *PostgresRepository) CreateEntry(ctx context.Context, companyID, recorde
 		  )
 		RETURNING id, warehouse_id,
 		          (SELECT name FROM warehouses WHERE company_id = $1 AND id = $2),
-		          work_date::TEXT, item_id, item_name, step_id, step_title, quantity,
+		          work_date::TEXT, item_id, item_name, step_id, step_title, unit_of_measure, quantity,
 		          performed_by, (SELECT name FROM users WHERE company_id = $1 AND id = $6),
 		          recorded_by, created_at::TEXT
 	`, companyID, input.WarehouseID, input.WorkDate, input.ItemID, input.StepID,
 		input.PerformedBy, input.Quantity, recorderID).Scan(
 		&entry.ID, &entry.WarehouseID, &entry.WarehouseName, &entry.WorkDate,
-		&entry.ItemID, &entry.ItemName, &entry.StepID, &entry.StepTitle, &entry.Quantity,
+		&entry.ItemID, &entry.ItemName, &entry.StepID, &entry.StepTitle, &entry.UnitOfMeasure, &entry.Quantity,
 		&entry.PerformedBy, &entry.PerformerName, &entry.RecordedBy, &entry.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, ErrInvalidInput
 	}
+	return entry, err
+}
+
+func (r *PostgresRepository) UpdateEntry(ctx context.Context, companyID, id int64, input Input) (Entry, error) {
+	entry, err := scanEntry(r.pool.QueryRow(ctx, `
+		UPDATE operation_work_logs log
+		SET work_date = $3::DATE,
+		    item_id = item.id,
+		    item_name = item.name,
+		    step_id = step.id,
+		    step_title = step.title,
+		    unit_of_measure = item.unit_of_measure,
+		    quantity = $8,
+		    performed_by = performer.id
+		FROM items item
+		JOIN item_steps step ON step.company_id = item.company_id AND step.item_id = item.id
+		JOIN warehouses warehouse ON warehouse.company_id = item.company_id AND warehouse.id = $4
+		JOIN users performer ON performer.company_id = item.company_id AND performer.id = $7 AND performer.is_active
+		WHERE log.company_id = $1 AND log.id = $2 AND log.warehouse_id = $4
+		  AND item.company_id = $1 AND item.id = $5 AND item.is_active AND step.id = $6
+		  AND EXISTS (
+			SELECT 1
+			FROM user_role_assignments assignment
+			JOIN roles role ON role.company_id = assignment.company_id AND role.id = assignment.role_id
+			WHERE assignment.company_id = item.company_id
+			  AND assignment.user_id = performer.id
+			  AND assignment.warehouse_id = warehouse.id
+			  AND role.slug = 'worker'
+		  )
+		RETURNING log.id, log.warehouse_id,
+		          (SELECT name FROM warehouses WHERE company_id = $1 AND id = $4),
+		          log.work_date::TEXT, log.item_id, log.item_name, log.step_id, log.step_title,
+		          log.unit_of_measure, log.quantity, log.performed_by,
+		          (SELECT name FROM users WHERE company_id = $1 AND id = $7),
+		          log.recorded_by, log.created_at::TEXT
+	`, companyID, id, input.WorkDate, input.WarehouseID, input.ItemID, input.StepID,
+		input.PerformedBy, input.Quantity))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Entry{}, ErrInvalidInput
+	}
+	return entry, err
+}
+
+func scanEntry(row pgx.Row) (Entry, error) {
+	var entry Entry
+	err := row.Scan(&entry.ID, &entry.WarehouseID, &entry.WarehouseName, &entry.WorkDate,
+		&entry.ItemID, &entry.ItemName, &entry.StepID, &entry.StepTitle, &entry.UnitOfMeasure, &entry.Quantity,
+		&entry.PerformedBy, &entry.PerformerName, &entry.RecordedBy, &entry.CreatedAt)
 	return entry, err
 }

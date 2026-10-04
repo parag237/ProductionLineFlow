@@ -18,6 +18,7 @@ type fakeRepository struct {
 	performers       []PerformerOption
 	entries          []Entry
 	created          Entry
+	existing         Entry
 	lastCompanyID    int64
 	lastRecorderID   int64
 	lastWarehouseIDs []int64
@@ -27,6 +28,7 @@ type fakeRepository struct {
 	lastCreateInput  Input
 	listCalls        int
 	createCalls      int
+	updateCalls      int
 	optionsCalls     int
 }
 
@@ -62,6 +64,17 @@ func (r *fakeRepository) CreateEntry(_ context.Context, companyID, recorderID in
 	return r.created, nil
 }
 
+func (r *fakeRepository) GetEntry(context.Context, int64, int64) (Entry, error) {
+	return r.existing, nil
+}
+
+func (r *fakeRepository) UpdateEntry(_ context.Context, companyID, _ int64, input Input) (Entry, error) {
+	r.lastCompanyID = companyID
+	r.lastCreateInput = input
+	r.updateCalls++
+	return Entry{ID: r.existing.ID, Quantity: input.Quantity, WorkDate: input.WorkDate}, nil
+}
+
 func TestCreateUsesActorAsRecorderAndSelectedPerformer(t *testing.T) {
 	repository := &fakeRepository{created: Entry{ID: 4}}
 	service := NewService(repository)
@@ -78,6 +91,56 @@ func TestCreateUsesActorAsRecorderAndSelectedPerformer(t *testing.T) {
 	}
 	if repository.lastCreateInput.PerformedBy != 9 {
 		t.Fatalf("expected selected performer 9, got %d", repository.lastCreateInput.PerformedBy)
+	}
+}
+
+func TestCreateAcceptsFractionalQuantity(t *testing.T) {
+	warehouseID := int64(12)
+	repository := &fakeRepository{}
+	service := NewService(repository)
+	actor := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID}}}
+	input := Input{WarehouseID: warehouseID, WorkDate: todayDate(), ItemID: 21, StepID: 34, Quantity: 1.75, PerformedBy: 9}
+	if _, err := service.Create(context.Background(), actor, input); err != nil {
+		t.Fatalf("Create rejected fractional quantity: %v", err)
+	}
+	if repository.lastCreateInput.Quantity != 1.75 {
+		t.Fatalf("expected 1.75 quantity, got %v", repository.lastCreateInput.Quantity)
+	}
+}
+
+func TestUpdateRequiresEditPermissionAndKeepsEntryWarehouse(t *testing.T) {
+	warehouseID := int64(12)
+	existingDate := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	existing := Entry{ID: 44, WarehouseID: warehouseID, WorkDate: existingDate}
+	repository := &fakeRepository{existing: existing}
+	service := NewService(repository)
+	input := Input{WarehouseID: warehouseID, WorkDate: existing.WorkDate, ItemID: 21, StepID: 34, Quantity: 1.75, PerformedBy: 9}
+
+	creator := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID}}}
+	if _, err := service.Update(context.Background(), creator, existing.ID, input); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected create-only actor to be denied edits, got %v", err)
+	}
+	if repository.updateCalls != 0 {
+		t.Fatal("unauthorized edit reached repository")
+	}
+
+	editor := rbac.Actor{UserID: 10, CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsEdit, WarehouseID: &warehouseID}}}
+	updated, err := service.Update(context.Background(), editor, existing.ID, input)
+	if err != nil {
+		t.Fatalf("authorized edit failed: %v", err)
+	}
+	if updated.Quantity != 1.75 || repository.lastCompanyID != editor.CompanyID {
+		t.Fatalf("edit did not preserve updated values: entry=%+v repository=%+v", updated, repository)
+	}
+
+	input.WorkDate = time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
+	if _, err := service.Update(context.Background(), editor, existing.ID, input); !errors.Is(err, ErrDateOverrideForbidden) {
+		t.Fatalf("expected date override permission to be required, got %v", err)
+	}
+	input.WorkDate = existing.WorkDate
+	input.WarehouseID = 13
+	if _, err := service.Update(context.Background(), editor, existing.ID, input); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected warehouse move to be rejected, got %v", err)
 	}
 }
 

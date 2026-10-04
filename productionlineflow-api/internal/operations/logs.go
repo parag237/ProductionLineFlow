@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"errors"
+	"math"
 	"sort"
 	"time"
 
@@ -28,9 +29,10 @@ type StepOption struct {
 }
 
 type ItemOption struct {
-	ID    int64        `json:"id"`
-	Name  string       `json:"name"`
-	Steps []StepOption `json:"steps"`
+	ID            int64        `json:"id"`
+	Name          string       `json:"name"`
+	UnitOfMeasure string       `json:"unit_of_measure"`
+	Steps         []StepOption `json:"steps"`
 }
 
 type PerformerOption struct {
@@ -46,28 +48,29 @@ type Options struct {
 }
 
 type Entry struct {
-	ID            int64  `json:"id"`
-	WarehouseID   int64  `json:"warehouse_id"`
-	WarehouseName string `json:"warehouse_name"`
-	WorkDate      string `json:"work_date"`
-	ItemID        int64  `json:"item_id"`
-	ItemName      string `json:"item_name"`
-	StepID        int64  `json:"step_id"`
-	StepTitle     string `json:"step_title"`
-	Quantity      int64  `json:"quantity"`
-	PerformedBy   int64  `json:"performed_by"`
-	PerformerName string `json:"performer_name"`
-	RecordedBy    int64  `json:"recorded_by"`
-	CreatedAt     string `json:"created_at"`
+	ID            int64   `json:"id"`
+	WarehouseID   int64   `json:"warehouse_id"`
+	WarehouseName string  `json:"warehouse_name"`
+	WorkDate      string  `json:"work_date"`
+	ItemID        int64   `json:"item_id"`
+	ItemName      string  `json:"item_name"`
+	StepID        int64   `json:"step_id"`
+	StepTitle     string  `json:"step_title"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	Quantity      float64 `json:"quantity"`
+	PerformedBy   int64   `json:"performed_by"`
+	PerformerName string  `json:"performer_name"`
+	RecordedBy    int64   `json:"recorded_by"`
+	CreatedAt     string  `json:"created_at"`
 }
 
 type Input struct {
-	WarehouseID int64  `json:"warehouse_id"`
-	WorkDate    string `json:"work_date"`
-	ItemID      int64  `json:"item_id"`
-	StepID      int64  `json:"step_id"`
-	Quantity    int64  `json:"quantity"`
-	PerformedBy int64  `json:"performed_by"`
+	WarehouseID int64   `json:"warehouse_id"`
+	WorkDate    string  `json:"work_date"`
+	ItemID      int64   `json:"item_id"`
+	StepID      int64   `json:"step_id"`
+	Quantity    float64 `json:"quantity"`
+	PerformedBy int64   `json:"performed_by"`
 }
 
 type Repository interface {
@@ -75,7 +78,9 @@ type Repository interface {
 	ListCatalog(context.Context, int64) ([]ItemOption, error)
 	ListPerformers(context.Context, int64, int64) ([]PerformerOption, error)
 	ListEntries(context.Context, int64, []int64, bool, string) ([]Entry, error)
+	GetEntry(context.Context, int64, int64) (Entry, error)
 	CreateEntry(context.Context, int64, int64, Input) (Entry, error)
+	UpdateEntry(context.Context, int64, int64, Input) (Entry, error)
 }
 
 type Service struct{ repository Repository }
@@ -105,7 +110,7 @@ func (s *Service) Options(ctx context.Context, actor rbac.Actor, warehouseID *in
 	if !warehouseExists {
 		return Options{}, ErrForbidden
 	}
-	if !actor.Can(constants.PermissionOperationLogsCreate, warehouseID) {
+	if !actor.Can(constants.PermissionOperationLogsCreate, warehouseID) && !actor.Can(constants.PermissionOperationLogsEdit, warehouseID) {
 		return Options{}, ErrForbidden
 	}
 	options.Items, err = s.repository.ListCatalog(ctx, actor.CompanyID)
@@ -127,12 +132,12 @@ func (s *Service) List(ctx context.Context, actor rbac.Actor, warehouseID *int64
 		if *warehouseID < 1 {
 			return nil, ErrInvalidInput
 		}
-		if !actor.Can(constants.PermissionOperationLogsView, warehouseID) {
+		if !actor.Can(constants.PermissionOperationLogsView, warehouseID) && !actor.Can(constants.PermissionOperationLogsEdit, warehouseID) {
 			return nil, ErrForbidden
 		}
 		return s.repository.ListEntries(ctx, actor.CompanyID, []int64{*warehouseID}, false, workDate)
 	}
-	warehouseIDs, companyWide := warehousesForPermission(actor, constants.PermissionOperationLogsView)
+	warehouseIDs, companyWide := warehousesForPermission(actor, constants.PermissionOperationLogsView, constants.PermissionOperationLogsEdit)
 	if !companyWide && len(warehouseIDs) == 0 {
 		return nil, ErrForbidden
 	}
@@ -143,7 +148,7 @@ func (s *Service) Create(ctx context.Context, actor rbac.Actor, input Input) (En
 	if !actor.Can(constants.PermissionOperationLogsCreate, &input.WarehouseID) {
 		return Entry{}, ErrForbidden
 	}
-	if input.WarehouseID < 1 || input.ItemID < 1 || input.StepID < 1 || input.PerformedBy < 1 || input.Quantity < 1 || !validDate(input.WorkDate) {
+	if input.WarehouseID < 1 || input.ItemID < 1 || input.StepID < 1 || input.PerformedBy < 1 || input.Quantity <= 0 || math.IsNaN(input.Quantity) || math.IsInf(input.Quantity, 0) || !validDate(input.WorkDate) {
 		return Entry{}, ErrInvalidInput
 	}
 	canOverrideDate := actor.Can(constants.PermissionOperationLogsDateOverride, nil) || actor.Can(constants.PermissionAdminsManage, nil)
@@ -153,8 +158,29 @@ func (s *Service) Create(ctx context.Context, actor rbac.Actor, input Input) (En
 	return s.repository.CreateEntry(ctx, actor.CompanyID, actor.UserID, input)
 }
 
+func (s *Service) Update(ctx context.Context, actor rbac.Actor, id int64, input Input) (Entry, error) {
+	if id < 1 {
+		return Entry{}, ErrInvalidInput
+	}
+	current, err := s.repository.GetEntry(ctx, actor.CompanyID, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !actor.Can(constants.PermissionOperationLogsEdit, &current.WarehouseID) {
+		return Entry{}, ErrForbidden
+	}
+	if input.WarehouseID != current.WarehouseID || input.WarehouseID < 1 || input.ItemID < 1 || input.StepID < 1 || input.PerformedBy < 1 || input.Quantity <= 0 || math.IsNaN(input.Quantity) || math.IsInf(input.Quantity, 0) || !validDate(input.WorkDate) {
+		return Entry{}, ErrInvalidInput
+	}
+	canOverrideDate := actor.Can(constants.PermissionOperationLogsDateOverride, nil) || actor.Can(constants.PermissionAdminsManage, nil)
+	if input.WorkDate != current.WorkDate && input.WorkDate != todayDate() && !canOverrideDate {
+		return Entry{}, ErrDateOverrideForbidden
+	}
+	return s.repository.UpdateEntry(ctx, actor.CompanyID, id, input)
+}
+
 func allowedWarehouses(actor rbac.Actor) ([]int64, bool) {
-	return warehousesForPermission(actor, constants.PermissionOperationLogsView, constants.PermissionOperationLogsCreate)
+	return warehousesForPermission(actor, constants.PermissionOperationLogsView, constants.PermissionOperationLogsCreate, constants.PermissionOperationLogsEdit)
 }
 
 func warehousesForPermission(actor rbac.Actor, permissions ...string) ([]int64, bool) {

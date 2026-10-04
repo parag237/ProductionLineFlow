@@ -132,6 +132,7 @@ func registerOperationLogRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 	secured.GET("/operation-logs/options", handler.Options)
 	secured.GET("/operation-logs", handler.List)
 	secured.POST("/operation-logs", handler.Create)
+	secured.PATCH("/operation-logs/:id", handler.Update)
 }
 
 func registerWarehouseRoutes(secured *gin.RouterGroup, deps *Dependencies) {

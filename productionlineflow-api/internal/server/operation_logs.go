@@ -81,6 +81,30 @@ func (h *OperationLogHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, entry)
 }
 
+func (h *OperationLogHandler) Update(c *gin.Context) {
+	actor, ok := tenantActor(c)
+	if !ok {
+		writeError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id < 1 {
+		writeError(c, http.StatusBadRequest, "invalid_id", "Invalid operation log id")
+		return
+	}
+	var input operationsModule.Input
+	if c.ShouldBindJSON(&input) != nil {
+		writeError(c, http.StatusBadRequest, "invalid_request", "Invalid operation log request")
+		return
+	}
+	entry, err := h.service.Update(c.Request.Context(), actor, id, input)
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, entry)
+}
+
 func (h *OperationLogHandler) writeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, operationsModule.ErrForbidden):

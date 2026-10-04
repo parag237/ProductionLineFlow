@@ -37,6 +37,7 @@ func TestRouterRegistersOperationLogRoutes(t *testing.T) {
 		{http.MethodGet, "/api/v1/operation-logs/options"},
 		{http.MethodGet, "/api/v1/operation-logs?warehouse_id=all&work_date=2026-10-04"},
 		{http.MethodPost, "/api/v1/operation-logs"},
+		{http.MethodPatch, "/api/v1/operation-logs/1"},
 	} {
 		t.Run(target.method+" "+target.path, func(t *testing.T) {
 			request := httptest.NewRequest(target.method, target.path, nil)

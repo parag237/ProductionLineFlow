@@ -22,6 +22,7 @@ const (
 	PermissionItemCategoriesManage      = "items.categories.manage"
 	PermissionOperationLogsView         = "operations.logs.view"
 	PermissionOperationLogsCreate       = "operations.logs.create"
+	PermissionOperationLogsEdit         = "operations.logs.edit"
 	PermissionOperationLogsDateOverride = "operations.logs.date_override"
 
 	UserContextKey                = "auth.user"
