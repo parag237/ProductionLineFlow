@@ -119,6 +119,166 @@ func (r *PostgresRepository) ListEntries(ctx context.Context, companyID int64, w
 	return entries, rows.Err()
 }
 
+const analysisFilter = `company_id = $1 AND ($2::BOOLEAN OR warehouse_id = ANY($3::BIGINT[])) AND work_date BETWEEN $4::DATE AND $5::DATE`
+
+func (r *PostgresRepository) Analyze(ctx context.Context, companyID int64, warehouseIDs []int64, companyWide bool, fromDate, toDate string) (Analysis, error) {
+	analysis := Analysis{
+		Units:      []UnitTotal{},
+		Daily:      []DailyTotal{},
+		Categories: []CategoryTotal{},
+		Items:      []ItemTotal{},
+		Steps:      []StepTotal{},
+		Performers: []PerformerTotal{},
+	}
+	args := []any{companyID, companyWide, warehouseIDs, fromDate, toDate}
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*), COUNT(DISTINCT item_id), COUNT(DISTINCT (item_id, step_id)), COUNT(DISTINCT performed_by)
+		FROM operation_work_logs WHERE `+analysisFilter, args...).Scan(
+		&analysis.Summary.EntryCount, &analysis.Summary.ItemCount, &analysis.Summary.StepCount, &analysis.Summary.PerformerCount,
+	); err != nil {
+		return Analysis{}, err
+	}
+
+	unitRows, err := r.pool.Query(ctx, `
+		SELECT unit_of_measure, SUM(quantity)::DOUBLE PRECISION
+		FROM operation_work_logs WHERE `+analysisFilter+`
+		GROUP BY unit_of_measure ORDER BY unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for unitRows.Next() {
+		var total UnitTotal
+		if err := unitRows.Scan(&total.UnitOfMeasure, &total.Quantity); err != nil {
+			unitRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Units = append(analysis.Units, total)
+	}
+	if err := unitRows.Err(); err != nil {
+		unitRows.Close()
+		return Analysis{}, err
+	}
+	unitRows.Close()
+
+	dailyRows, err := r.pool.Query(ctx, `
+		SELECT work_date::TEXT, unit_of_measure, COUNT(*), SUM(quantity)::DOUBLE PRECISION
+		FROM operation_work_logs WHERE `+analysisFilter+`
+		GROUP BY work_date, unit_of_measure ORDER BY work_date, unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for dailyRows.Next() {
+		var total DailyTotal
+		if err := dailyRows.Scan(&total.WorkDate, &total.UnitOfMeasure, &total.EntryCount, &total.Quantity); err != nil {
+			dailyRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Daily = append(analysis.Daily, total)
+	}
+	if err := dailyRows.Err(); err != nil {
+		dailyRows.Close()
+		return Analysis{}, err
+	}
+	dailyRows.Close()
+
+	categoryRows, err := r.pool.Query(ctx, `
+		SELECT category_name, unit_of_measure, COUNT(*), SUM(quantity)::DOUBLE PRECISION
+		FROM operation_work_logs WHERE `+analysisFilter+`
+		GROUP BY category_name, unit_of_measure ORDER BY COUNT(*) DESC, category_name, unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for categoryRows.Next() {
+		var total CategoryTotal
+		if err := categoryRows.Scan(&total.CategoryName, &total.UnitOfMeasure, &total.EntryCount, &total.Quantity); err != nil {
+			categoryRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Categories = append(analysis.Categories, total)
+	}
+	if err := categoryRows.Err(); err != nil {
+		categoryRows.Close()
+		return Analysis{}, err
+	}
+	categoryRows.Close()
+
+	itemRows, err := r.pool.Query(ctx, `
+		SELECT item_id, item_name, category_name, unit_of_measure, COUNT(*), SUM(quantity)::DOUBLE PRECISION
+		FROM operation_work_logs WHERE `+analysisFilter+`
+		GROUP BY item_id, item_name, category_name, unit_of_measure
+		ORDER BY COUNT(*) DESC, item_name, unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for itemRows.Next() {
+		var total ItemTotal
+		if err := itemRows.Scan(&total.ItemID, &total.ItemName, &total.CategoryName, &total.UnitOfMeasure, &total.EntryCount, &total.Quantity); err != nil {
+			itemRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Items = append(analysis.Items, total)
+	}
+	if err := itemRows.Err(); err != nil {
+		itemRows.Close()
+		return Analysis{}, err
+	}
+	itemRows.Close()
+
+	stepRows, err := r.pool.Query(ctx, `
+		SELECT item_name, step_title, unit_of_measure, COUNT(*), SUM(quantity)::DOUBLE PRECISION
+		FROM operation_work_logs WHERE `+analysisFilter+`
+		GROUP BY item_name, step_title, unit_of_measure
+		ORDER BY COUNT(*) DESC, item_name, step_title, unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for stepRows.Next() {
+		var total StepTotal
+		if err := stepRows.Scan(&total.ItemName, &total.StepTitle, &total.UnitOfMeasure, &total.EntryCount, &total.Quantity); err != nil {
+			stepRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Steps = append(analysis.Steps, total)
+	}
+	if err := stepRows.Err(); err != nil {
+		stepRows.Close()
+		return Analysis{}, err
+	}
+	stepRows.Close()
+
+	performerRows, err := r.pool.Query(ctx, `
+		SELECT performed_by, performer.name, log.unit_of_measure, COUNT(*), SUM(log.quantity)::DOUBLE PRECISION
+		FROM operation_work_logs log
+		JOIN users performer ON performer.company_id = log.company_id AND performer.id = log.performed_by
+		WHERE log.`+analysisFilter+`
+		GROUP BY performed_by, performer.name, log.unit_of_measure
+		ORDER BY COUNT(*) DESC, performer.name, log.unit_of_measure
+	`, args...)
+	if err != nil {
+		return Analysis{}, err
+	}
+	for performerRows.Next() {
+		var total PerformerTotal
+		if err := performerRows.Scan(&total.PerformerID, &total.PerformerName, &total.UnitOfMeasure, &total.EntryCount, &total.Quantity); err != nil {
+			performerRows.Close()
+			return Analysis{}, err
+		}
+		analysis.Performers = append(analysis.Performers, total)
+	}
+	if err := performerRows.Err(); err != nil {
+		performerRows.Close()
+		return Analysis{}, err
+	}
+	performerRows.Close()
+
+	return analysis, nil
+}
+
 func (r *PostgresRepository) GetEntry(ctx context.Context, companyID, id int64) (Entry, error) {
 	entry, err := scanEntry(r.pool.QueryRow(ctx, `
 		SELECT log.id, log.warehouse_id, warehouse.name, log.work_date::TEXT,
@@ -167,7 +327,7 @@ func (r *PostgresRepository) CreateEntry(ctx context.Context, companyID, recorde
 	`, companyID, input.WarehouseID, input.WorkDate, input.ItemID, input.StepID,
 		input.PerformedBy, input.Quantity, recorderID).Scan(
 		&entry.ID, &entry.WarehouseID, &entry.WarehouseName, &entry.WorkDate,
-		&entry.ItemID, &entry.ItemName, &entry.StepID, &entry.StepTitle, &entry.UnitOfMeasure, &entry.Quantity,
+		&entry.ItemID, &entry.ItemName, &entry.CategoryName, &entry.StepID, &entry.StepTitle, &entry.UnitOfMeasure, &entry.Quantity,
 		&entry.PerformedBy, &entry.PerformerName, &entry.RecordedBy, &entry.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -1,10 +1,14 @@
+import type { Permissions } from '../../types';
+import OperationsAnalysis from './OperationsAnalysis';
+
 type OperationsHubProps = {
   page: 'menu' | 'analysis';
+  permissions: Permissions;
   onOpenAnalysis: () => void;
   onOpenWorkLog: () => void;
 };
 
-export default function OperationsHub({ page, onOpenAnalysis, onOpenWorkLog }: OperationsHubProps) {
+export default function OperationsHub({ page, permissions, onOpenAnalysis, onOpenWorkLog }: OperationsHubProps) {
   return (
     <main className="workspace-shell">
       <section className="workspace-content operations-hub">
@@ -25,10 +29,7 @@ export default function OperationsHub({ page, onOpenAnalysis, onOpenWorkLog }: O
             <span className="operations-choice-name">Work log</span>
             <span className="operations-choice-arrow" aria-hidden="true">↗</span>
           </button>
-        </div> : <section className="operations-analysis-empty">
-          <span className="panel-kicker">Analysis</span>
-          <h2>No analysis is available yet.</h2>
-        </section>}
+        </div> : <OperationsAnalysis permissions={permissions} />}
       </section>
     </main>
   );

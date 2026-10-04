@@ -48,6 +48,67 @@ type Options struct {
 	Today      string            `json:"today"`
 }
 
+type AnalysisSummary struct {
+	EntryCount     int64 `json:"entry_count"`
+	ItemCount      int64 `json:"item_count"`
+	StepCount      int64 `json:"step_count"`
+	PerformerCount int64 `json:"performer_count"`
+}
+
+type UnitTotal struct {
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type DailyTotal struct {
+	WorkDate      string  `json:"work_date"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	EntryCount    int64   `json:"entry_count"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type CategoryTotal struct {
+	CategoryName  string  `json:"category_name"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	EntryCount    int64   `json:"entry_count"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type ItemTotal struct {
+	ItemID        int64   `json:"item_id"`
+	ItemName      string  `json:"item_name"`
+	CategoryName  string  `json:"category_name"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	EntryCount    int64   `json:"entry_count"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type StepTotal struct {
+	ItemName      string  `json:"item_name"`
+	StepTitle     string  `json:"step_title"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	EntryCount    int64   `json:"entry_count"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type PerformerTotal struct {
+	PerformerID   int64   `json:"performer_id"`
+	PerformerName string  `json:"performer_name"`
+	UnitOfMeasure string  `json:"unit_of_measure"`
+	EntryCount    int64   `json:"entry_count"`
+	Quantity      float64 `json:"quantity"`
+}
+
+type Analysis struct {
+	Summary    AnalysisSummary  `json:"summary"`
+	Units      []UnitTotal      `json:"units"`
+	Daily      []DailyTotal     `json:"daily"`
+	Categories []CategoryTotal  `json:"categories"`
+	Items      []ItemTotal      `json:"items"`
+	Steps      []StepTotal      `json:"steps"`
+	Performers []PerformerTotal `json:"performers"`
+}
+
 type Entry struct {
 	ID            int64   `json:"id"`
 	WarehouseID   int64   `json:"warehouse_id"`
@@ -80,6 +141,7 @@ type Repository interface {
 	ListCatalog(context.Context, int64) ([]ItemOption, error)
 	ListPerformers(context.Context, int64, int64) ([]PerformerOption, error)
 	ListEntries(context.Context, int64, []int64, bool, string) ([]Entry, error)
+	Analyze(context.Context, int64, []int64, bool, string, string) (Analysis, error)
 	GetEntry(context.Context, int64, int64) (Entry, error)
 	CreateEntry(context.Context, int64, int64, Input) (Entry, error)
 	UpdateEntry(context.Context, int64, int64, Input) (Entry, error)
@@ -144,6 +206,26 @@ func (s *Service) List(ctx context.Context, actor rbac.Actor, warehouseID *int64
 		return nil, ErrForbidden
 	}
 	return s.repository.ListEntries(ctx, actor.CompanyID, warehouseIDs, companyWide, workDate)
+}
+
+func (s *Service) Analyze(ctx context.Context, actor rbac.Actor, warehouseID *int64, fromDate, toDate string) (Analysis, error) {
+	if !validDate(fromDate) || !validDate(toDate) || fromDate > toDate {
+		return Analysis{}, ErrInvalidInput
+	}
+	if warehouseID != nil {
+		if *warehouseID < 1 {
+			return Analysis{}, ErrInvalidInput
+		}
+		if !actor.Can(constants.PermissionOperationLogsView, warehouseID) && !actor.Can(constants.PermissionOperationLogsEdit, warehouseID) {
+			return Analysis{}, ErrForbidden
+		}
+		return s.repository.Analyze(ctx, actor.CompanyID, []int64{*warehouseID}, false, fromDate, toDate)
+	}
+	warehouseIDs, companyWide := warehousesForPermission(actor, constants.PermissionOperationLogsView, constants.PermissionOperationLogsEdit)
+	if !companyWide && len(warehouseIDs) == 0 {
+		return Analysis{}, ErrForbidden
+	}
+	return s.repository.Analyze(ctx, actor.CompanyID, warehouseIDs, companyWide, fromDate, toDate)
 }
 
 func (s *Service) Create(ctx context.Context, actor rbac.Actor, input Input) (Entry, error) {

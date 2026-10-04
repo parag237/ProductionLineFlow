@@ -25,6 +25,9 @@ type fakeRepository struct {
 	lastCompanyWide  bool
 	lastListIDs      []int64
 	lastListWide     bool
+	lastAnalysisIDs  []int64
+	lastAnalysisWide bool
+	analysisCalls    int
 	lastCreateInput  Input
 	listCalls        int
 	createCalls      int
@@ -54,6 +57,14 @@ func (r *fakeRepository) ListEntries(_ context.Context, companyID int64, warehou
 	r.lastListWide = companyWide
 	r.listCalls++
 	return r.entries, nil
+}
+
+func (r *fakeRepository) Analyze(_ context.Context, companyID int64, warehouseIDs []int64, companyWide bool, _, _ string) (Analysis, error) {
+	r.lastCompanyID = companyID
+	r.lastAnalysisIDs = warehouseIDs
+	r.lastAnalysisWide = companyWide
+	r.analysisCalls++
+	return Analysis{Summary: AnalysisSummary{EntryCount: 2}}, nil
 }
 
 func (r *fakeRepository) CreateEntry(_ context.Context, companyID, recorderID int64, input Input) (Entry, error) {
@@ -228,6 +239,33 @@ func TestListAllWarehousesUsesOnlyViewableScope(t *testing.T) {
 	}
 	if !repository.lastListWide {
 		t.Fatal("expected company admin to list all company warehouses")
+	}
+}
+
+func TestAnalyzeUsesOnlyAuthorizedWarehousesAndValidDates(t *testing.T) {
+	warehouseID := int64(12)
+	createOnlyWarehouseID := int64(18)
+	repository := &fakeRepository{}
+	service := NewService(repository)
+	actor := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{
+		{Permission: constants.PermissionOperationLogsView, WarehouseID: &warehouseID},
+		{Permission: constants.PermissionOperationLogsEdit, WarehouseID: &warehouseID},
+		{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &createOnlyWarehouseID},
+	}}
+
+	analysis, err := service.Analyze(context.Background(), actor, nil, "2026-10-01", "2026-10-04")
+	if err != nil || analysis.Summary.EntryCount != 2 {
+		t.Fatalf("Analyze returned analysis=%+v err=%v", analysis, err)
+	}
+	if !reflect.DeepEqual(repository.lastAnalysisIDs, []int64{warehouseID}) || repository.lastAnalysisWide {
+		t.Fatalf("analysis exceeded view/edit scope: ids=%v companyWide=%v", repository.lastAnalysisIDs, repository.lastAnalysisWide)
+	}
+	if _, err := service.Analyze(context.Background(), actor, nil, "2026-10-05", "2026-10-04"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected inverted date range to fail, got %v", err)
+	}
+	createOnly := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &createOnlyWarehouseID}}}
+	if _, err := service.Analyze(context.Background(), createOnly, nil, "2026-10-01", "2026-10-04"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected create-only actor to be denied analysis, got %v", err)
 	}
 }
 

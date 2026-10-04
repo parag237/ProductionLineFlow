@@ -62,6 +62,29 @@ func (h *OperationLogHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"entries": entries})
 }
 
+func (h *OperationLogHandler) Analyze(c *gin.Context) {
+	actor, ok := tenantActor(c)
+	if !ok {
+		writeError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
+		return
+	}
+	var warehouseID *int64
+	if value := c.Query("warehouse_id"); value != "" && value != "all" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed < 1 {
+			writeError(c, http.StatusBadRequest, "invalid_id", "Invalid warehouse id")
+			return
+		}
+		warehouseID = &parsed
+	}
+	analysis, err := h.service.Analyze(c.Request.Context(), actor, warehouseID, c.Query("from_date"), c.Query("to_date"))
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, analysis)
+}
+
 func (h *OperationLogHandler) Create(c *gin.Context) {
 	actor, ok := tenantActor(c)
 	if !ok {
