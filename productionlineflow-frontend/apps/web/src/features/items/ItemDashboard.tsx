@@ -4,6 +4,22 @@ import { markFormSubmitted } from '../../shared/forms';
 import type { ApiError, Item, ItemStepInput, Permissions, ProductionRun, ProductionUnit } from '../../types';
 
 type StepDraft = ItemStepInput & { key: number };
+const unitChoices = [
+  { value: 'pieces', label: 'Pieces' },
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'tonne', label: 'Tonnes (t)' },
+  { value: 'dozen', label: 'Dozen' },
+  { value: 'litre', label: 'Litres (L)' },
+  { value: 'ml', label: 'Millilitres (ml)' },
+  { value: 'metre', label: 'Metres (m)' },
+  { value: 'cm', label: 'Centimetres (cm)' },
+  { value: 'box', label: 'Boxes' },
+  { value: 'pack', label: 'Packs' },
+  { value: 'set', label: 'Sets' },
+  { value: 'roll', label: 'Rolls' },
+  { value: 'bag', label: 'Bags' },
+];
 
 export default function ItemDashboard({ permissions }: { permissions: Permissions }) {
   const canManageItems = permissions.company.includes('items.manage');
@@ -21,12 +37,15 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [description, setDescription] = useState('');
+  const [unitChoice, setUnitChoice] = useState('pieces');
+  const [customUnit, setCustomUnit] = useState('');
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [nextStepKey, setNextStepKey] = useState(1);
   const [selectedItemID, setSelectedItemID] = useState('');
   const [trackingMode, setTrackingMode] = useState<'batch' | 'unit'>('batch');
   const [quantity, setQuantity] = useState(1);
   const [serialNumbers, setSerialNumbers] = useState('');
+  const selectedProductionItem = items.find((item) => item.id === Number(selectedItemID));
 
   async function loadItems() {
     if (!canViewItems) return;
@@ -61,6 +80,8 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
     setName('');
     setSku('');
     setDescription('');
+    setUnitChoice('pieces');
+    setCustomUnit('');
     setSteps([{ key: firstKey, title: '', instructions: '' }]);
     setError('');
     setShowItemForm(true);
@@ -71,6 +92,9 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
     setName(item.name);
     setSku(item.sku ?? '');
     setDescription(item.description ?? '');
+    const knownUnit = unitChoices.some((unit) => unit.value === item.unit_of_measure);
+    setUnitChoice(knownUnit ? item.unit_of_measure : 'other');
+    setCustomUnit(knownUnit ? '' : item.unit_of_measure);
     setSteps(item.steps.map((step) => ({ key: step.id, title: step.title, instructions: step.instructions ?? '' })));
     setError('');
     setShowItemForm(true);
@@ -100,7 +124,8 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
     setSaving(true);
     setError('');
     try {
-      const payload = JSON.stringify({ name, sku, description, steps: steps.map(({ title, instructions }) => ({ title, instructions })) });
+      const unitOfMeasure = unitChoice === 'other' ? customUnit.trim() : unitChoice;
+      const payload = JSON.stringify({ name, sku, description, unit_of_measure: unitOfMeasure, steps: steps.map(({ title, instructions }) => ({ title, instructions })) });
       if (editing) await request(`/items/${editing.id}`, { method: 'PATCH', body: payload });
       else await request('/items', { method: 'POST', body: payload });
       setShowItemForm(false);
@@ -109,6 +134,13 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
       setError((saveError as ApiError).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  function closeItemForm() {
+    if (!saving) {
+      setShowItemForm(false);
+      setError('');
     }
   }
 
@@ -172,33 +204,54 @@ export default function ItemDashboard({ permissions }: { permissions: Permission
             {canViewProduction && <button className={view === 'production' ? 'primary-button compact-button' : 'quiet-button'} onClick={() => setView('production')}>Production</button>}
           </div>
         </div>
-        {error && <div className="form-error" role="alert">{error}</div>}
+        {error && !showItemForm && <div className="form-error" role="alert">{error}</div>}
 
         {view === 'catalog' && canViewItems && <>
           <div className="workspace-heading"><div><span className="panel-kicker">Catalog</span><h2>Company items</h2></div>{canManageItems && <button className="primary-button compact-button" onClick={startCreate}>Add item</button>}</div>
-          {showItemForm && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">{editing ? 'Update item' : 'New item'}</span><h2>{editing ? 'Edit item' : 'Add item'}</h2></div><form onSubmit={saveItem} onInvalid={markFormSubmitted}>
-            <label>Item name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required /></label>
-            <label>SKU<input value={sku} onChange={(event) => setSku(event.target.value)} maxLength={64} /></label>
-            <label>Description<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} /></label>
-            <div className="panel-heading"><span className="panel-kicker">Production sequence</span><h3>Steps</h3></div>
-            {steps.map((step, index) => <div className="warehouse-row" key={step.key}><div className="item-step-fields"><label>Step {index + 1}<input value={step.title} onChange={(event) => updateStep(step.key, 'title', event.target.value)} maxLength={120} required /></label><label>Instructions<textarea value={step.instructions} onChange={(event) => updateStep(step.key, 'instructions', event.target.value)} maxLength={2000} rows={2} /></label></div><div className="company-actions"><button className="quiet-button" type="button" disabled={index === 0} onClick={() => moveStep(index, -1)} aria-label={`Move step ${index + 1} up`}>Up</button><button className="quiet-button" type="button" disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} aria-label={`Move step ${index + 1} down`}>Down</button><button className="danger-button" type="button" disabled={steps.length === 1} onClick={() => setSteps((current) => current.filter((item) => item.key !== step.key))}>Remove</button></div></div>)}
-            <div className="company-actions"><button className="quiet-button" type="button" onClick={addStep}>Add step</button><button className="primary-button compact-button" type="submit" disabled={saving}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Create item'}</button><button className="quiet-button" type="button" onClick={() => setShowItemForm(false)}>Cancel</button></div>
-          </form></section>}
-          {loading ? <div className="directory-message">Loading items...</div> : items.length === 0 ? <div className="empty-state">No items yet. Add the first company item.</div> : <div className="warehouse-list">{items.map((item) => <article className="warehouse-row item-row" key={item.id}><div className="item-summary"><strong>{item.name}</strong><span>{item.sku || 'No SKU'}{item.description ? ` · ${item.description}` : ''}</span><ol>{item.steps.map((step) => <li key={step.id}>{step.title}</li>)}</ol></div><span className={`status-badge ${item.is_active ? 'active' : ''}`}>{item.is_active ? 'Active' : 'Archived'}</span>{canManageItems && item.is_active && <div className="company-actions"><button className="quiet-button" onClick={() => startEdit(item)}>Edit</button><button className="danger-button" onClick={() => void archiveItem(item)}>Archive</button></div>}</article>)}</div>}
+          {loading ? <div className="directory-message">Loading items...</div> : items.length === 0 ? <div className="empty-state">No items yet. Add the first company item.</div> : <div className="warehouse-list">{items.map((item) => <article className="warehouse-row item-row" key={item.id}><div className="item-summary"><strong>{item.name}</strong><span>{item.sku || 'No SKU'} · {item.unit_of_measure}{item.description ? ` · ${item.description}` : ''}</span><ol>{item.steps.map((step) => <li key={step.id}>{step.title}</li>)}</ol></div><span className={`status-badge ${item.is_active ? 'active' : ''}`}>{item.is_active ? 'Active' : 'Archived'}</span>{canManageItems && item.is_active && <div className="company-actions"><button className="quiet-button" onClick={() => startEdit(item)}>Edit</button><button className="danger-button" onClick={() => void archiveItem(item)}>Archive</button></div>}</article>)}</div>}
         </>}
+
+        {showItemForm && <div className="modal-backdrop item-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeItemForm(); }} onKeyDown={(event) => { if (event.key === 'Escape') closeItemForm(); }}>
+          <section className="people-dialog item-dialog" role="dialog" aria-modal="true" aria-labelledby="item-dialog-title">
+            <div className="dialog-heading">
+              <div><span className="panel-kicker">{editing ? 'Update item' : 'New item'}</span><h2 id="item-dialog-title">{editing ? 'Edit item' : 'Add new item'}</h2><p>Set the item details, unit, and work steps.</p></div>
+              <button className="dialog-close" type="button" aria-label="Close item form" disabled={saving} onClick={closeItemForm}>×</button>
+            </div>
+            <form className="item-form" onSubmit={saveItem} onInvalid={markFormSubmitted}>
+              <div className="item-basic-fields">
+                <label>Item name<input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required /></label>
+                <label>SKU<input value={sku} onChange={(event) => setSku(event.target.value)} maxLength={64} /></label>
+                <label>Unit of measure<select value={unitChoice} onChange={(event) => setUnitChoice(event.target.value)} required>
+                  {unitChoices.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+                  <option value="other">Other</option>
+                </select></label>
+                {unitChoice === 'other' && <label>Custom unit<input value={customUnit} onChange={(event) => setCustomUnit(event.target.value)} maxLength={40} placeholder="e.g. pallet" required /></label>}
+                <label className="item-description-field">Description<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={2} /></label>
+              </div>
+              <div className="item-steps-heading"><div><span className="panel-kicker">Work sequence</span><h3>Steps</h3></div><button className="quiet-button" type="button" onClick={addStep}>Add step</button></div>
+              <div className="item-step-list">{steps.map((step, index) => <section className="item-step-card" key={step.key}>
+                <div className="item-step-card-heading"><strong>Step {index + 1}</strong><div className="company-actions"><button className="quiet-button" type="button" disabled={index === 0} onClick={() => moveStep(index, -1)} aria-label={`Move step ${index + 1} up`}>Move up</button><button className="quiet-button" type="button" disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} aria-label={`Move step ${index + 1} down`}>Move down</button><button className="danger-button" type="button" disabled={steps.length === 1} onClick={() => setSteps((current) => current.filter((item) => item.key !== step.key))}>Remove</button></div></div>
+                <label>Step name<input value={step.title} onChange={(event) => updateStep(step.key, 'title', event.target.value)} maxLength={120} required /></label>
+                <label>Instructions<textarea value={step.instructions} onChange={(event) => updateStep(step.key, 'instructions', event.target.value)} maxLength={2000} rows={3} /></label>
+              </section>)}</div>
+              {error && <div className="form-error" role="alert">{error}</div>}
+              <div className="dialog-footer"><button className="quiet-button" type="button" disabled={saving} onClick={closeItemForm}>Cancel</button><button className="primary-button" type="submit" disabled={saving}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Create item'}</button></div>
+            </form>
+          </section>
+        </div>}
 
         {view === 'production' && canViewProduction && <>
           <div className="workspace-heading"><div><span className="panel-kicker">Production runs</span><h2>Work in progress</h2></div></div>
           {canExecuteProduction && <section className="login-panel onboarding-panel"><div className="panel-heading"><span className="panel-kicker">Start production</span><h2>New run</h2></div><form onSubmit={startProduction} onInvalid={markFormSubmitted}>
-            <label>Item<select value={selectedItemID} onChange={(event) => setSelectedItemID(event.target.value)} required><option value="">Select an item</option>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.name}{item.sku ? ` · ${item.sku}` : ''}</option>)}</select></label>
+            <label>Item<select value={selectedItemID} onChange={(event) => setSelectedItemID(event.target.value)} required><option value="">Select an item</option>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.name}{item.sku ? ` · ${item.sku}` : ''} · {item.unit_of_measure}</option>)}</select></label>
             <label>Tracking<select value={trackingMode} onChange={(event) => setTrackingMode(event.target.value as 'batch' | 'unit')}><option value="batch">Quantity batch</option><option value="unit">Individual units</option></select></label>
-            {trackingMode === 'batch' ? <label>Quantity<input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} required /></label> : <label>Serial numbers, one per line<textarea value={serialNumbers} onChange={(event) => setSerialNumbers(event.target.value)} rows={4} required /></label>}
+            {trackingMode === 'batch' ? <label>Quantity ({selectedProductionItem?.unit_of_measure ?? 'units'})<input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} required /></label> : <label>Serial numbers, one per line<textarea value={serialNumbers} onChange={(event) => setSerialNumbers(event.target.value)} rows={4} required /></label>}
             <button className="primary-button compact-button" type="submit" disabled={saving || activeItems.length === 0}>{saving ? 'Starting...' : 'Start run'}</button>
           </form></section>}
           {loading ? <div className="directory-message">Loading production...</div> : runs.length === 0 ? <div className="empty-state">No production runs yet.</div> : <div className="warehouse-list">{runs.map((run) => (
             <article className="warehouse-row production-run-row" key={run.id}>
               <div className="production-run-heading">
-                <div><strong>{run.item_name}</strong><span>Run {run.id} · {run.tracking_mode === 'batch' ? `${run.quantity} units in batch` : `${run.quantity} serialised units`}</span></div>
+                <div><strong>{run.item_name}</strong><span>Run {run.id} · {run.tracking_mode === 'batch' ? `${run.quantity} ${run.unit_of_measure} in batch` : `${run.quantity} serialised units · ${run.unit_of_measure}`}</span></div>
                 <span className={`status-badge ${run.status === 'completed' ? 'active' : ''}`}>{run.status.replace('_', ' ')}</span>
               </div>
               {run.tracking_mode === 'batch' ? <ol className="production-steps">{run.steps.map((step) => {

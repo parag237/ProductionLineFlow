@@ -26,21 +26,23 @@ type Step struct {
 }
 
 type Item struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	SKU         string `json:"sku,omitempty"`
-	Description string `json:"description,omitempty"`
-	IsActive    bool   `json:"is_active"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	Steps       []Step `json:"steps"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	SKU           string `json:"sku,omitempty"`
+	Description   string `json:"description,omitempty"`
+	UnitOfMeasure string `json:"unit_of_measure"`
+	IsActive      bool   `json:"is_active"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+	Steps         []Step `json:"steps"`
 }
 
 type Input struct {
-	Name        string      `json:"name" binding:"required"`
-	SKU         string      `json:"sku"`
-	Description string      `json:"description"`
-	Steps       []StepInput `json:"steps" binding:"required,min=1,dive"`
+	Name          string      `json:"name" binding:"required"`
+	SKU           string      `json:"sku"`
+	Description   string      `json:"description"`
+	UnitOfMeasure string      `json:"unit_of_measure"`
+	Steps         []StepInput `json:"steps" binding:"required,min=1,dive"`
 }
 
 type StepInput struct {
@@ -107,7 +109,8 @@ func normalizeInput(input Input) (Input, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.SKU = strings.TrimSpace(input.SKU)
 	input.Description = strings.TrimSpace(input.Description)
-	if input.Name == "" || len(input.Name) > 120 || len(input.SKU) > 64 || len(input.Description) > 2000 || len(input.Steps) == 0 {
+	input.UnitOfMeasure = strings.TrimSpace(input.UnitOfMeasure)
+	if input.Name == "" || len(input.Name) > 120 || len(input.SKU) > 64 || len(input.Description) > 2000 || input.UnitOfMeasure == "" || len(input.UnitOfMeasure) > 40 || len(input.Steps) == 0 {
 		return Input{}, ErrInvalidInput
 	}
 	for index := range input.Steps {

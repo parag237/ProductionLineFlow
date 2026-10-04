@@ -17,7 +17,7 @@ func NewProductionPostgresRepository(pool *pgxpool.Pool) *ProductionPostgresRepo
 }
 
 func (r *ProductionPostgresRepository) ListRuns(ctx context.Context, companyID int64) ([]ProductionRun, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, item_id, item_name, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 ORDER BY created_at DESC, id DESC`, companyID)
+	rows, err := r.pool.Query(ctx, `SELECT id, item_id, item_name, unit_of_measure, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 ORDER BY created_at DESC, id DESC`, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (r *ProductionPostgresRepository) ListRuns(ctx context.Context, companyID i
 }
 
 func (r *ProductionPostgresRepository) GetRun(ctx context.Context, companyID, id int64) (ProductionRun, error) {
-	run, err := scanRun(r.pool.QueryRow(ctx, `SELECT id, item_id, item_name, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 AND id = $2`, companyID, id))
+	run, err := scanRun(r.pool.QueryRow(ctx, `SELECT id, item_id, item_name, unit_of_measure, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 AND id = $2`, companyID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProductionRun{}, ErrNotFound
 	}
@@ -57,9 +57,9 @@ func (r *ProductionPostgresRepository) CreateRun(ctx context.Context, companyID,
 	}
 	defer tx.Rollback(ctx)
 
-	var itemName string
+	var itemName, unitOfMeasure string
 	var stepCount int
-	err = tx.QueryRow(ctx, `SELECT name FROM items WHERE company_id = $1 AND id = $2 AND is_active FOR SHARE`, companyID, input.ItemID).Scan(&itemName)
+	err = tx.QueryRow(ctx, `SELECT name, unit_of_measure FROM items WHERE company_id = $1 AND id = $2 AND is_active FOR SHARE`, companyID, input.ItemID).Scan(&itemName, &unitOfMeasure)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProductionRun{}, ErrNotFound
 	}
@@ -74,7 +74,7 @@ func (r *ProductionPostgresRepository) CreateRun(ctx context.Context, companyID,
 	}
 
 	var runID int64
-	err = tx.QueryRow(ctx, `INSERT INTO production_runs(company_id, item_id, item_name, tracking_mode, quantity, created_by) VALUES($1, $2, $3, $4, $5, $6) RETURNING id`, companyID, input.ItemID, itemName, input.TrackingMode, input.Quantity, userID).Scan(&runID)
+	err = tx.QueryRow(ctx, `INSERT INTO production_runs(company_id, item_id, item_name, unit_of_measure, tracking_mode, quantity, created_by) VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING id`, companyID, input.ItemID, itemName, unitOfMeasure, input.TrackingMode, input.Quantity, userID).Scan(&runID)
 	if err != nil {
 		return ProductionRun{}, mapProductionConflict(err)
 	}
@@ -195,7 +195,7 @@ func (r *ProductionPostgresRepository) CompleteStep(ctx context.Context, company
 func scanRun(row pgx.Row) (ProductionRun, error) {
 	var run ProductionRun
 	var completedAt *string
-	err := row.Scan(&run.ID, &run.ItemID, &run.ItemName, &run.TrackingMode, &run.Quantity, &run.Status, &run.CreatedBy, &run.StartedAt, &completedAt)
+	err := row.Scan(&run.ID, &run.ItemID, &run.ItemName, &run.UnitOfMeasure, &run.TrackingMode, &run.Quantity, &run.Status, &run.CreatedBy, &run.StartedAt, &completedAt)
 	run.CompletedAt = completedAt
 	run.Steps = []RunStep{}
 	run.Units = []ProductionUnit{}
@@ -204,7 +204,7 @@ func scanRun(row pgx.Row) (ProductionRun, error) {
 }
 
 func getRun(ctx context.Context, db queryer, companyID, runID int64) (ProductionRun, error) {
-	run, err := scanRun(db.QueryRow(ctx, `SELECT id, item_id, item_name, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 AND id = $2`, companyID, runID))
+	run, err := scanRun(db.QueryRow(ctx, `SELECT id, item_id, item_name, unit_of_measure, tracking_mode, quantity, status, created_by, started_at::text, completed_at::text FROM production_runs WHERE company_id = $1 AND id = $2`, companyID, runID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProductionRun{}, ErrNotFound
 	}

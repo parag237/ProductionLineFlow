@@ -20,13 +20,13 @@ func (r *testRepository) CreateItem(_ context.Context, companyID int64, input In
 	r.companyID = companyID
 	r.created = true
 	r.input = input
-	return Item{ID: 1, Name: input.Name, SKU: input.SKU, IsActive: true}, nil
+	return Item{ID: 1, Name: input.Name, SKU: input.SKU, UnitOfMeasure: input.UnitOfMeasure, IsActive: true}, nil
 }
 
 func TestCreateRequiresManageAndScopesToActorCompany(t *testing.T) {
 	repository := &testRepository{}
 	service := NewService(repository)
-	input := Input{Name: "  Widget ", SKU: " SKU-1 ", Steps: []StepInput{{Title: "  Cut "}}}
+	input := Input{Name: "  Widget ", SKU: " SKU-1 ", UnitOfMeasure: " kg ", Steps: []StepInput{{Title: "  Cut "}}}
 	viewer := rbac.Actor{CompanyID: 12, Assignments: []rbac.Assignment{{Permission: constants.PermissionItemsView}}}
 	if _, err := service.Create(context.Background(), viewer, input); err != ErrForbidden {
 		t.Fatalf("expected forbidden, got %v", err)
@@ -39,7 +39,7 @@ func TestCreateRequiresManageAndScopesToActorCompany(t *testing.T) {
 	if _, err := service.Create(context.Background(), manager, input); err != nil {
 		t.Fatalf("create item: %v", err)
 	}
-	if repository.companyID != 34 || repository.input.Name != "Widget" || repository.input.SKU != "SKU-1" || repository.input.Steps[0].Title != "Cut" {
+	if repository.companyID != 34 || repository.input.Name != "Widget" || repository.input.SKU != "SKU-1" || repository.input.UnitOfMeasure != "kg" || repository.input.Steps[0].Title != "Cut" {
 		t.Fatalf("unexpected persisted input: company=%d input=%#v", repository.companyID, repository.input)
 	}
 }
@@ -51,6 +51,8 @@ func TestCreateRejectsItemsWithoutValidSteps(t *testing.T) {
 	for _, input := range []Input{
 		{Name: "No steps"},
 		{Name: "Bad step", Steps: []StepInput{{Title: " "}}},
+		{Name: "No unit", Steps: []StepInput{{Title: "Cut"}}},
+		{Name: "Long unit", UnitOfMeasure: "measure-measure-measure-measure-measure-too-long", Steps: []StepInput{{Title: "Cut"}}},
 	} {
 		if _, err := service.Create(context.Background(), actor, input); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("expected invalid input, got %v", err)

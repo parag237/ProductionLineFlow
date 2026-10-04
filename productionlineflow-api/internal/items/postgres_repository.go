@@ -22,11 +22,11 @@ type queryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-const itemSelect = `SELECT id, name, COALESCE(sku, ''), description, is_active, created_at::text, updated_at::text FROM items WHERE company_id = $1`
+const itemSelect = `SELECT id, name, COALESCE(sku, ''), description, unit_of_measure, is_active, created_at::text, updated_at::text FROM items WHERE company_id = $1`
 
 func scanItem(row pgx.Row) (Item, error) {
 	var item Item
-	err := row.Scan(&item.ID, &item.Name, &item.SKU, &item.Description, &item.IsActive, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Name, &item.SKU, &item.Description, &item.UnitOfMeasure, &item.IsActive, &item.CreatedAt, &item.UpdatedAt)
 	item.Steps = []Step{}
 	return item, err
 }
@@ -76,7 +76,7 @@ func (r *PostgresRepository) CreateItem(ctx context.Context, companyID int64, in
 		sku = input.SKU
 	}
 	var id int64
-	err = tx.QueryRow(ctx, `INSERT INTO items(company_id, name, sku, description) VALUES($1, $2, $3, $4) RETURNING id`, companyID, input.Name, sku, input.Description).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO items(company_id, name, sku, description, unit_of_measure) VALUES($1, $2, $3, $4, $5) RETURNING id`, companyID, input.Name, sku, input.Description, input.UnitOfMeasure).Scan(&id)
 	if err != nil {
 		return Item{}, mapItemConflict(err)
 	}
@@ -104,7 +104,7 @@ func (r *PostgresRepository) UpdateItem(ctx context.Context, companyID, id int64
 	if input.SKU != "" {
 		sku = input.SKU
 	}
-	result, err := tx.Exec(ctx, `UPDATE items SET name = $3, sku = $4, description = $5, updated_at = now() WHERE company_id = $1 AND id = $2`, companyID, id, input.Name, sku, input.Description)
+	result, err := tx.Exec(ctx, `UPDATE items SET name = $3, sku = $4, description = $5, unit_of_measure = $6, updated_at = now() WHERE company_id = $1 AND id = $2`, companyID, id, input.Name, sku, input.Description, input.UnitOfMeasure)
 	if err != nil {
 		return Item{}, mapItemConflict(err)
 	}

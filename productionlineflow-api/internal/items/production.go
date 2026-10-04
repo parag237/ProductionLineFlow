@@ -35,18 +35,19 @@ type StepEvent struct {
 }
 
 type ProductionRun struct {
-	ID           int64            `json:"id"`
-	ItemID       int64            `json:"item_id"`
-	ItemName     string           `json:"item_name"`
-	TrackingMode string           `json:"tracking_mode"`
-	Quantity     int              `json:"quantity"`
-	Status       string           `json:"status"`
-	CreatedBy    int64            `json:"created_by"`
-	StartedAt    string           `json:"started_at"`
-	CompletedAt  *string          `json:"completed_at,omitempty"`
-	Steps        []RunStep        `json:"steps"`
-	Units        []ProductionUnit `json:"units"`
-	Events       []StepEvent      `json:"events"`
+	ID            int64            `json:"id"`
+	ItemID        int64            `json:"item_id"`
+	ItemName      string           `json:"item_name"`
+	UnitOfMeasure string           `json:"unit_of_measure"`
+	TrackingMode  string           `json:"tracking_mode"`
+	Quantity      int              `json:"quantity"`
+	Status        string           `json:"status"`
+	CreatedBy     int64            `json:"created_by"`
+	StartedAt     string           `json:"started_at"`
+	CompletedAt   *string          `json:"completed_at,omitempty"`
+	Steps         []RunStep        `json:"steps"`
+	Units         []ProductionUnit `json:"units"`
+	Events        []StepEvent      `json:"events"`
 }
 
 type RunInput struct {
