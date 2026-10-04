@@ -22,17 +22,17 @@ type queryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-const itemSelect = `SELECT id, name, COALESCE(sku, ''), description, unit_of_measure, is_active, created_at::text, updated_at::text FROM items WHERE company_id = $1`
+const itemSelect = `SELECT item.id, item.name, COALESCE(item.sku, ''), item.description, item.unit_of_measure, item.category_id, category.name, item.is_active, item.created_at::text, item.updated_at::text FROM items item JOIN item_categories category ON category.company_id = item.company_id AND category.id = item.category_id WHERE item.company_id = $1`
 
 func scanItem(row pgx.Row) (Item, error) {
 	var item Item
-	err := row.Scan(&item.ID, &item.Name, &item.SKU, &item.Description, &item.UnitOfMeasure, &item.IsActive, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Name, &item.SKU, &item.Description, &item.UnitOfMeasure, &item.CategoryID, &item.CategoryName, &item.IsActive, &item.CreatedAt, &item.UpdatedAt)
 	item.Steps = []Step{}
 	return item, err
 }
 
 func (r *PostgresRepository) ListItems(ctx context.Context, companyID int64) ([]Item, error) {
-	rows, err := r.pool.Query(ctx, itemSelect+` ORDER BY name, id`, companyID)
+	rows, err := r.pool.Query(ctx, itemSelect+` ORDER BY item.name, item.id`, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (r *PostgresRepository) CreateItem(ctx context.Context, companyID int64, in
 		sku = input.SKU
 	}
 	var id int64
-	err = tx.QueryRow(ctx, `INSERT INTO items(company_id, name, sku, description, unit_of_measure) VALUES($1, $2, $3, $4, $5) RETURNING id`, companyID, input.Name, sku, input.Description, input.UnitOfMeasure).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO items(company_id, name, sku, description, unit_of_measure, category_id) VALUES($1, $2, $3, $4, $5, $6) RETURNING id`, companyID, input.Name, sku, input.Description, input.UnitOfMeasure, input.CategoryID).Scan(&id)
 	if err != nil {
 		return Item{}, mapItemConflict(err)
 	}
@@ -104,7 +104,7 @@ func (r *PostgresRepository) UpdateItem(ctx context.Context, companyID, id int64
 	if input.SKU != "" {
 		sku = input.SKU
 	}
-	result, err := tx.Exec(ctx, `UPDATE items SET name = $3, sku = $4, description = $5, unit_of_measure = $6, updated_at = now() WHERE company_id = $1 AND id = $2`, companyID, id, input.Name, sku, input.Description, input.UnitOfMeasure)
+	result, err := tx.Exec(ctx, `UPDATE items SET name = $3, sku = $4, description = $5, unit_of_measure = $6, category_id = $7, updated_at = now() WHERE company_id = $1 AND id = $2`, companyID, id, input.Name, sku, input.Description, input.UnitOfMeasure, input.CategoryID)
 	if err != nil {
 		return Item{}, mapItemConflict(err)
 	}
@@ -138,8 +138,14 @@ func (r *PostgresRepository) ArchiveItem(ctx context.Context, companyID, id int6
 	return nil
 }
 
+func (r *PostgresRepository) CategoryExists(ctx context.Context, companyID, categoryID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM item_categories WHERE company_id = $1 AND id = $2)`, companyID, categoryID).Scan(&exists)
+	return exists, err
+}
+
 func getItem(ctx context.Context, db queryer, companyID, id int64) (Item, error) {
-	item, err := scanItem(db.QueryRow(ctx, itemSelect+` AND id = $2`, companyID, id))
+	item, err := scanItem(db.QueryRow(ctx, itemSelect+` AND item.id = $2`, companyID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, ErrNotFound
 	}
@@ -189,8 +195,13 @@ func insertSteps(ctx context.Context, db queryer, companyID, itemID int64, steps
 
 func mapItemConflict(err error) error {
 	var pgError *pgconn.PgError
-	if errors.As(err, &pgError) && pgError.Code == "23505" && pgError.ConstraintName == "items_company_sku" {
-		return ErrConflict
+	if errors.As(err, &pgError) {
+		if pgError.Code == "23505" && pgError.ConstraintName == "items_company_sku" {
+			return ErrConflict
+		}
+		if pgError.Code == "23503" && pgError.ConstraintName == "items_company_category_fk" {
+			return ErrInvalidInput
+		}
 	}
 	return err
 }

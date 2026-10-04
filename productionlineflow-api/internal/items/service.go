@@ -11,11 +11,10 @@ import (
 )
 
 var (
-	ErrForbidden       = errors.New("item permission denied")
-	ErrInvalidInput    = errors.New("invalid item input")
-	ErrNotFound        = errors.New("item or production run not found")
-	ErrConflict        = errors.New("item or production run conflict")
-	ErrInvalidProgress = errors.New("invalid production progress")
+	ErrForbidden    = errors.New("item permission denied")
+	ErrInvalidInput = errors.New("invalid item input")
+	ErrNotFound     = errors.New("item not found")
+	ErrConflict     = errors.New("item conflict")
 )
 
 type Step struct {
@@ -31,6 +30,8 @@ type Item struct {
 	SKU           string `json:"sku,omitempty"`
 	Description   string `json:"description,omitempty"`
 	UnitOfMeasure string `json:"unit_of_measure"`
+	CategoryID    int64  `json:"category_id"`
+	CategoryName  string `json:"category_name"`
 	IsActive      bool   `json:"is_active"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
@@ -42,6 +43,7 @@ type Input struct {
 	SKU           string      `json:"sku"`
 	Description   string      `json:"description"`
 	UnitOfMeasure string      `json:"unit_of_measure"`
+	CategoryID    int64       `json:"category_id" binding:"required,gt=0"`
 	Steps         []StepInput `json:"steps" binding:"required,min=1,dive"`
 }
 
@@ -56,6 +58,7 @@ type Repository interface {
 	CreateItem(context.Context, int64, Input) (Item, error)
 	UpdateItem(context.Context, int64, int64, Input) (Item, error)
 	ArchiveItem(context.Context, int64, int64) error
+	CategoryExists(context.Context, int64, int64) (bool, error)
 }
 
 type Service struct{ repository Repository }
@@ -63,14 +66,14 @@ type Service struct{ repository Repository }
 func NewService(repository Repository) *Service { return &Service{repository: repository} }
 
 func (s *Service) List(ctx context.Context, actor rbac.Actor) ([]Item, error) {
-	if !actor.Can(constants.PermissionItemsView, nil) && !actor.Can(constants.PermissionItemsManage, nil) && !actor.Can(constants.PermissionProductionExecute, nil) {
+	if !actor.Can(constants.PermissionItemsView, nil) && !actor.Can(constants.PermissionItemsManage, nil) {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListItems(ctx, actor.CompanyID)
 }
 
 func (s *Service) Get(ctx context.Context, actor rbac.Actor, id int64) (Item, error) {
-	if !actor.Can(constants.PermissionItemsView, nil) && !actor.Can(constants.PermissionItemsManage, nil) && !actor.Can(constants.PermissionProductionExecute, nil) {
+	if !actor.Can(constants.PermissionItemsView, nil) && !actor.Can(constants.PermissionItemsManage, nil) {
 		return Item{}, ErrForbidden
 	}
 	return s.repository.GetItem(ctx, actor.CompanyID, id)
@@ -84,6 +87,9 @@ func (s *Service) Create(ctx context.Context, actor rbac.Actor, input Input) (It
 	if err != nil {
 		return Item{}, err
 	}
+	if err := s.validateCategory(ctx, actor.CompanyID, input.CategoryID); err != nil {
+		return Item{}, err
+	}
 	return s.repository.CreateItem(ctx, actor.CompanyID, input)
 }
 
@@ -95,7 +101,24 @@ func (s *Service) Update(ctx context.Context, actor rbac.Actor, id int64, input 
 	if err != nil {
 		return Item{}, err
 	}
+	if err := s.validateCategory(ctx, actor.CompanyID, input.CategoryID); err != nil {
+		return Item{}, err
+	}
 	return s.repository.UpdateItem(ctx, actor.CompanyID, id, input)
+}
+
+func (s *Service) validateCategory(ctx context.Context, companyID, categoryID int64) error {
+	if categoryID < 1 {
+		return ErrInvalidInput
+	}
+	exists, err := s.repository.CategoryExists(ctx, companyID, categoryID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrInvalidInput
+	}
+	return nil
 }
 
 func (s *Service) Archive(ctx context.Context, actor rbac.Actor, id int64) error {
@@ -110,7 +133,7 @@ func normalizeInput(input Input) (Input, error) {
 	input.SKU = strings.TrimSpace(input.SKU)
 	input.Description = strings.TrimSpace(input.Description)
 	input.UnitOfMeasure = strings.TrimSpace(input.UnitOfMeasure)
-	if input.Name == "" || len(input.Name) > 120 || len(input.SKU) > 64 || len(input.Description) > 2000 || input.UnitOfMeasure == "" || len(input.UnitOfMeasure) > 40 || len(input.Steps) == 0 {
+	if input.Name == "" || len(input.Name) > 120 || len(input.SKU) > 64 || len(input.Description) > 2000 || input.UnitOfMeasure == "" || len(input.UnitOfMeasure) > 40 || input.CategoryID < 1 || len(input.Steps) == 0 {
 		return Input{}, ErrInvalidInput
 	}
 	for index := range input.Steps {

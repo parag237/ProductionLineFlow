@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	categoryModule "productionlineflow-api/internal/categories"
 	itemsModule "productionlineflow-api/internal/items"
 	operationsModule "productionlineflow-api/internal/operations"
 
@@ -65,21 +66,25 @@ func TestRouterHealthChecksAtRoot(t *testing.T) {
 	}
 }
 
-func TestRouterRegistersItemAndProductionRoutes(t *testing.T) {
+func TestRouterRegistersItemAndCategoryRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := NewRouter(nil, &Dependencies{
 		Items:      itemsModule.NewService(nil),
-		Production: itemsModule.NewProductionService(nil),
+		Categories: categoryModule.NewService(nil),
 	})
 
-	for _, path := range []string{"/api/v1/items", "/api/v1/production/runs"} {
+	for _, path := range []string{"/api/v1/items", "/api/v1/categories", "/api/v1/production/runs"} {
 		t.Run(path, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 
-			if response.Code != http.StatusUnauthorized {
-				t.Fatalf("expected registered handler status %d, got %d", http.StatusUnauthorized, response.Code)
+			expectedStatus := http.StatusUnauthorized
+			if path == "/api/v1/production/runs" {
+				expectedStatus = http.StatusNotFound
+			}
+			if response.Code != expectedStatus {
+				t.Fatalf("expected status %d, got %d", expectedStatus, response.Code)
 			}
 		})
 	}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { refreshTenantSession, request } from './api/client';
 import { clearRefreshToken, endIdleSession, isLoginRoute, redirectToLogin, setTenantAccessToken } from './api/session';
 import LoginView from './features/auth/LoginView';
-import ItemDashboard from './features/items/ItemDashboard';
+import CatalogDashboard from './features/items/CatalogDashboard';
 import OperationsDashboard from './features/operations/OperationsDashboard';
 import OperationsHub from './features/operations/OperationsHub';
 import PeopleDashboard from './features/people/PeopleDashboard';
@@ -83,6 +83,6 @@ export default function App() {
   }
   return <>
     <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople || showItems || showOperations ? goBack : undefined} />
-    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : showItems ? <ItemDashboard permissions={permissions} /> : showOperations ? operationsPage === 'workLog' ? <OperationsDashboard permissions={permissions} /> : <OperationsHub page={operationsPage} onOpenAnalysis={() => setOperationsPage('analysis')} onOpenWorkLog={() => setOperationsPage('workLog')} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} onOpenItems={() => setShowItems(true)} onOpenOperations={() => { setOperationsPage('menu'); setShowOperations(true); }} />}
+    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : showItems ? <CatalogDashboard permissions={permissions} /> : showOperations ? operationsPage === 'workLog' ? <OperationsDashboard permissions={permissions} /> : <OperationsHub page={operationsPage} onOpenAnalysis={() => setOperationsPage('analysis')} onOpenWorkLog={() => setOperationsPage('workLog')} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} onOpenItems={() => setShowItems(true)} onOpenOperations={() => { setOperationsPage('menu'); setShowOperations(true); }} />}
   </>;
 }

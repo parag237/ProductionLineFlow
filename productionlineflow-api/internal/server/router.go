@@ -108,8 +108,20 @@ func registerTenantRoutes(versioned *gin.RouterGroup, deps *Dependencies, authHa
 	})
 	registerWarehouseRoutes(secured, deps)
 	registerPeopleRoutes(secured, deps)
+	registerCategoryRoutes(secured, deps)
 	registerItemRoutes(secured, deps)
 	registerOperationLogRoutes(secured, deps)
+}
+
+func registerCategoryRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || deps.Categories == nil {
+		return
+	}
+	handler := NewCategoryHandler(deps.Categories)
+	secured.GET("/categories", handler.List)
+	secured.POST("/categories", handler.Create)
+	secured.PATCH("/categories/:id", handler.Update)
+	secured.DELETE("/categories/:id", handler.Delete)
 }
 
 func registerOperationLogRoutes(secured *gin.RouterGroup, deps *Dependencies) {
@@ -155,23 +167,15 @@ func registerPeopleRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 }
 
 func registerItemRoutes(secured *gin.RouterGroup, deps *Dependencies) {
-	if deps == nil || (deps.Items == nil && deps.Production == nil) {
+	if deps == nil || deps.Items == nil {
 		return
 	}
-	handler := NewItemHandler(deps.Items, deps.Production)
-	if deps.Items != nil {
-		secured.GET("/items", handler.List)
-		secured.POST("/items", handler.Create)
-		secured.GET("/items/:id", handler.Get)
-		secured.PATCH("/items/:id", handler.Update)
-		secured.DELETE("/items/:id", handler.Archive)
-	}
-	if deps.Production != nil {
-		secured.GET("/production/runs", handler.ListRuns)
-		secured.POST("/production/runs", handler.CreateRun)
-		secured.GET("/production/runs/:runID", handler.GetRun)
-		secured.POST("/production/runs/:runID/steps/:stepID/complete", handler.CompleteStep)
-	}
+	handler := NewItemHandler(deps.Items)
+	secured.GET("/items", handler.List)
+	secured.POST("/items", handler.Create)
+	secured.GET("/items/:id", handler.Get)
+	secured.PATCH("/items/:id", handler.Update)
+	secured.DELETE("/items/:id", handler.Archive)
 }
 
 func registerAuthRoutes(root, versioned gin.IRoutes, prefix string, login, refresh, logout gin.HandlerFunc) {
