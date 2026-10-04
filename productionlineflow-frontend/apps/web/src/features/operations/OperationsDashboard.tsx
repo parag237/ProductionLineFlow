@@ -14,8 +14,10 @@ function hasPermission(permissions: Permissions, permission: string, warehouseID
 
 export default function OperationsDashboard({ permissions }: { permissions: Permissions }) {
   const [warehouses, setWarehouses] = useState<OperationLogOptions['warehouses']>([]);
-  const [warehouseID, setWarehouseID] = useState('');
-  const [workDate, setWorkDate] = useState(localDate);
+  const [filterWarehouseID, setFilterWarehouseID] = useState('all');
+  const [entryWarehouseID, setEntryWarehouseID] = useState('');
+  const [filterDate, setFilterDate] = useState(localDate);
+  const [entryDate, setEntryDate] = useState(localDate);
   const [items, setItems] = useState<OperationLogItemOption[]>([]);
   const [performers, setPerformers] = useState<OperationLogPerformerOption[]>([]);
   const [entries, setEntries] = useState<OperationLogEntry[]>([]);
@@ -30,11 +32,16 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const selectedWarehouseID = Number(warehouseID);
-  const canViewSelected = Number.isInteger(selectedWarehouseID) && selectedWarehouseID > 0 && hasPermission(permissions, 'operations.logs.view', selectedWarehouseID);
-  const canCreateSelected = Number.isInteger(selectedWarehouseID) && selectedWarehouseID > 0 && hasPermission(permissions, 'operations.logs.create', selectedWarehouseID);
+  const canViewAny = permissions.company.includes('operations.logs.view') || Object.values(permissions.warehouses).some((list) => list.includes('operations.logs.view'));
+  const canEditWorkDate = permissions.company.includes('operations.logs.date_override') || permissions.company.includes('admins.manage');
+  const selectedFilterWarehouseID = Number(filterWarehouseID);
+  const selectedEntryWarehouseID = Number(entryWarehouseID);
+  const canViewFilter = filterWarehouseID === 'all' ? canViewAny : Number.isInteger(selectedFilterWarehouseID) && selectedFilterWarehouseID > 0 && hasPermission(permissions, 'operations.logs.view', selectedFilterWarehouseID);
+  const canCreateSelected = Number.isInteger(selectedEntryWarehouseID) && selectedEntryWarehouseID > 0 && hasPermission(permissions, 'operations.logs.create', selectedEntryWarehouseID);
+  const visibleWarehouses = warehouses.filter((warehouse) => hasPermission(permissions, 'operations.logs.view', warehouse.id));
+  const creatableWarehouses = warehouses.filter((warehouse) => hasPermission(permissions, 'operations.logs.create', warehouse.id));
   const selectedItem = items.find((item) => item.id === Number(itemID));
-  const displayDate = workDate ? new Date(`${workDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : 'Select a work date';
+  const displayDate = filterDate ? new Date(`${filterDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : 'Select a work date';
 
   useEffect(() => {
     let active = true;
@@ -43,7 +50,12 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
         if (!active) return;
         const availableWarehouses = options.warehouses ?? [];
         setWarehouses(availableWarehouses);
-        setWarehouseID((current) => current || String(availableWarehouses[0]?.id ?? ''));
+        const firstCreatable = availableWarehouses.find((warehouse) => hasPermission(permissions, 'operations.logs.create', warehouse.id));
+        setEntryWarehouseID((current) => current || String(firstCreatable?.id ?? ''));
+        setFilterWarehouseID(canViewAny ? 'all' : '');
+        const currentDate = options.today || localDate();
+        setFilterDate(currentDate);
+        setEntryDate(currentDate);
       })
       .catch((loadError) => {
         if (active) setError((loadError as ApiError).message);
@@ -52,10 +64,10 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
         if (active) setLoadingWarehouses(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [canViewAny, permissions]);
 
   useEffect(() => {
-    if (!warehouseID || !canCreateSelected) {
+    if (!entryWarehouseID || !canCreateSelected) {
       setItems([]);
       setPerformers([]);
       setItemID('');
@@ -67,7 +79,7 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
     let active = true;
     setLoadingOptions(true);
     setError('');
-    request<OperationLogOptions>(`/operation-logs/options?warehouse_id=${encodeURIComponent(warehouseID)}`)
+    request<OperationLogOptions>(`/operation-logs/options?warehouse_id=${encodeURIComponent(entryWarehouseID)}`)
       .then((options) => {
         if (!active) return;
         setItems(options.items ?? []);
@@ -83,10 +95,10 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
         if (active) setLoadingOptions(false);
       });
     return () => { active = false; };
-  }, [warehouseID, canCreateSelected]);
+  }, [entryWarehouseID, canCreateSelected]);
 
   useEffect(() => {
-    if (!warehouseID || !workDate || !canViewSelected) {
+    if (!filterDate || !canViewFilter) {
       setEntries([]);
       setLoadingEntries(false);
       return;
@@ -94,7 +106,7 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
     let active = true;
     setLoadingEntries(true);
     setError('');
-    const query = new URLSearchParams({ warehouse_id: warehouseID, work_date: workDate });
+    const query = new URLSearchParams({ warehouse_id: filterWarehouseID || 'all', work_date: filterDate });
     request<{ entries: OperationLogEntry[] }>(`/operation-logs?${query.toString()}`)
       .then((result) => {
         if (active) setEntries(result.entries ?? []);
@@ -106,11 +118,11 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
         if (active) setLoadingEntries(false);
       });
     return () => { active = false; };
-  }, [warehouseID, workDate, canViewSelected]);
+  }, [filterWarehouseID, filterDate, canViewFilter]);
 
   async function saveEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workDate) {
+    if (!entryDate || !entryWarehouseID) {
       setError('Select a work date.');
       return;
     }
@@ -121,15 +133,15 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
       const entry = await request<OperationLogEntry>('/operation-logs', {
         method: 'POST',
         body: JSON.stringify({
-          warehouse_id: selectedWarehouseID,
-          work_date: workDate,
+          warehouse_id: selectedEntryWarehouseID,
+          work_date: entryDate,
           item_id: Number(itemID),
           step_id: Number(stepID),
           quantity,
           performed_by: Number(performerID),
         }),
       });
-      if (canViewSelected && entry.work_date === workDate) setEntries((current) => [entry, ...current]);
+      if (canViewFilter && entry.work_date === filterDate && (filterWarehouseID === 'all' || entry.warehouse_id === selectedFilterWarehouseID)) setEntries((current) => [entry, ...current]);
       setQuantity(1);
       setSuccess('Work entry recorded.');
     } catch (saveError) {
@@ -148,24 +160,29 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
             <h1>Work, recorded.</h1>
             <p>Daily work entries by item, step, and person.</p>
           </div>
-          <div className="operation-log-filters">
-            <label>Warehouse<select value={warehouseID} onChange={(event) => setWarehouseID(event.target.value)} disabled={loadingWarehouses || warehouses.length === 0} required>
-              <option value="">Select a warehouse</option>
-              {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+          {canViewAny && <div className="operation-log-filters">
+            <label>Warehouse<select value={filterWarehouseID} onChange={(event) => setFilterWarehouseID(event.target.value)} disabled={loadingWarehouses || visibleWarehouses.length === 0}>
+              <option value="all">All warehouses</option>
+              {visibleWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
             </select></label>
-            <label>Work date<input type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} required /></label>
-          </div>
+            <label>Work date<input type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} required /></label>
+          </div>}
         </div>
 
         {error && <div className="form-error" role="alert">{error}</div>}
         {loadingWarehouses ? <div className="directory-message">Loading warehouses...</div> : warehouses.length === 0 ? <div className="empty-state">No warehouses are available for your operations permissions.</div> : (
-          <div className={`operation-log-layout ${canCreateSelected && canViewSelected ? '' : 'single-column'}`}>
+          <div className={`operation-log-layout ${canCreateSelected && canViewFilter ? '' : 'single-column'}`}>
             {canCreateSelected && <section className="operation-log-form-panel">
               <div className="operation-log-panel-heading">
                 <span className="panel-kicker">New entry</span>
                 <h2>Log Today&apos;s Entry</h2>
               </div>
               <form onSubmit={saveEntry} onInvalid={markFormSubmitted}>
+                <label>Warehouse<select value={entryWarehouseID} onChange={(event) => setEntryWarehouseID(event.target.value)} required disabled={creatableWarehouses.length === 0}>
+                  <option value="">Select a warehouse</option>
+                  {creatableWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+                </select></label>
+                <label>Work date<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required disabled={!canEditWorkDate} /></label>
                 <label>Item<select value={itemID} onChange={(event) => { setItemID(event.target.value); setStepID(''); }} required disabled={loadingOptions || items.length === 0}>
                   <option value="">Select an item</option>
                   {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -186,15 +203,16 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
               </form>
             </section>}
 
-            {canViewSelected && <section className="operation-log-list-panel">
+            {canViewFilter && <section className="operation-log-list-panel">
               <div className="operation-log-panel-heading">
                 <div><span className="panel-kicker">Daily entries</span><h2>{displayDate}</h2></div>
                 <span className="operation-log-count">{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
               </div>
               {loadingEntries ? <div className="directory-message">Loading entries...</div> : entries.length === 0 ? <div className="operation-log-empty">No work recorded for this date.</div> : (
                 <div className="operation-log-table-wrap"><table className="operation-log-table">
-                  <thead><tr><th>Item / step</th><th>Units</th><th>Performed by</th><th>Recorded</th></tr></thead>
+                  <thead><tr>{filterWarehouseID === 'all' && <th>Warehouse</th>}<th>Item / step</th><th>Units</th><th>Performed by</th><th>Recorded</th></tr></thead>
                   <tbody>{entries.map((entry) => <tr key={entry.id}>
+                    {filterWarehouseID === 'all' && <td>{entry.warehouse_name}</td>}
                     <td><strong>{entry.item_name}</strong><span>{entry.step_title}</span></td>
                     <td className="operation-log-quantity">{entry.quantity.toLocaleString()}</td>
                     <td>{entry.performer_name}</td>

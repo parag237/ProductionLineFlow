@@ -45,10 +45,14 @@ func (h *OperationLogHandler) List(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, "unauthorized", "Authentication required")
 		return
 	}
-	warehouseID, err := strconv.ParseInt(c.Query("warehouse_id"), 10, 64)
-	if err != nil || warehouseID < 1 {
-		writeError(c, http.StatusBadRequest, "invalid_id", "Invalid warehouse id")
-		return
+	var warehouseID *int64
+	if value := c.Query("warehouse_id"); value != "" && value != "all" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed < 1 {
+			writeError(c, http.StatusBadRequest, "invalid_id", "Invalid warehouse id")
+			return
+		}
+		warehouseID = &parsed
 	}
 	entries, err := h.service.List(c.Request.Context(), actor, warehouseID, c.Query("work_date"))
 	if err != nil {
@@ -81,6 +85,8 @@ func (h *OperationLogHandler) writeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, operationsModule.ErrForbidden):
 		writeError(c, http.StatusForbidden, "forbidden", "Operation log permission required")
+	case errors.Is(err, operationsModule.ErrDateOverrideForbidden):
+		writeError(c, http.StatusForbidden, "date_override_forbidden", "Only administrators can choose a work date other than today")
 	case errors.Is(err, operationsModule.ErrInvalidInput):
 		writeError(c, http.StatusBadRequest, "invalid_request", "Invalid operation log request")
 	case errors.Is(err, operationsModule.ErrNotFound):

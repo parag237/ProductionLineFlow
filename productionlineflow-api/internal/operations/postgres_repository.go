@@ -92,7 +92,7 @@ func (r *PostgresRepository) ListPerformers(ctx context.Context, companyID, ware
 	return performers, rows.Err()
 }
 
-func (r *PostgresRepository) ListEntries(ctx context.Context, companyID, warehouseID int64, workDate string) ([]Entry, error) {
+func (r *PostgresRepository) ListEntries(ctx context.Context, companyID int64, warehouseIDs []int64, companyWide bool, workDate string) ([]Entry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT log.id, log.warehouse_id, warehouse.name, log.work_date::TEXT,
 		       log.item_id, log.item_name, log.step_id, log.step_title, log.quantity,
@@ -100,9 +100,9 @@ func (r *PostgresRepository) ListEntries(ctx context.Context, companyID, warehou
 		FROM operation_work_logs log
 		JOIN warehouses warehouse ON warehouse.company_id = log.company_id AND warehouse.id = log.warehouse_id
 		JOIN users performer ON performer.company_id = log.company_id AND performer.id = log.performed_by
-		WHERE log.company_id = $1 AND log.warehouse_id = $2 AND log.work_date = $3::DATE
+		WHERE log.company_id = $1 AND ($2::BOOLEAN OR log.warehouse_id = ANY($3::BIGINT[])) AND log.work_date = $4::DATE
 		ORDER BY log.created_at DESC, log.id DESC
-	`, companyID, warehouseID, workDate)
+	`, companyID, companyWide, warehouseIDs, workDate)
 	if err != nil {
 		return nil, err
 	}

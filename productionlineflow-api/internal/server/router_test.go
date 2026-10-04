@@ -34,7 +34,7 @@ func TestRouterRegistersOperationLogRoutes(t *testing.T) {
 
 	for _, target := range []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/operation-logs/options"},
-		{http.MethodGet, "/api/v1/operation-logs?warehouse_id=1&work_date=2026-10-04"},
+		{http.MethodGet, "/api/v1/operation-logs?warehouse_id=all&work_date=2026-10-04"},
 		{http.MethodPost, "/api/v1/operation-logs"},
 	} {
 		t.Run(target.method+" "+target.path, func(t *testing.T) {

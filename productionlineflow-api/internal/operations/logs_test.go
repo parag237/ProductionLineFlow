@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sort"
 	"testing"
+	"time"
 
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
@@ -20,6 +22,8 @@ type fakeRepository struct {
 	lastRecorderID   int64
 	lastWarehouseIDs []int64
 	lastCompanyWide  bool
+	lastListIDs      []int64
+	lastListWide     bool
 	lastCreateInput  Input
 	listCalls        int
 	createCalls      int
@@ -42,8 +46,10 @@ func (r *fakeRepository) ListPerformers(context.Context, int64, int64) ([]Perfor
 	return r.performers, nil
 }
 
-func (r *fakeRepository) ListEntries(_ context.Context, companyID, _ int64, _ string) ([]Entry, error) {
+func (r *fakeRepository) ListEntries(_ context.Context, companyID int64, warehouseIDs []int64, companyWide bool, _ string) ([]Entry, error) {
 	r.lastCompanyID = companyID
+	r.lastListIDs = warehouseIDs
+	r.lastListWide = companyWide
 	r.listCalls++
 	return r.entries, nil
 }
@@ -61,7 +67,7 @@ func TestCreateUsesActorAsRecorderAndSelectedPerformer(t *testing.T) {
 	service := NewService(repository)
 	warehouseID := int64(12)
 	actor := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID}}}
-	input := Input{WarehouseID: warehouseID, WorkDate: "2026-10-04", ItemID: 21, StepID: 34, Quantity: 5, PerformedBy: 9}
+	input := Input{WarehouseID: warehouseID, WorkDate: todayDate(), ItemID: 21, StepID: 34, Quantity: 5, PerformedBy: 9}
 
 	entry, err := service.Create(context.Background(), actor, input)
 	if err != nil {
@@ -102,14 +108,15 @@ func TestListRequiresWarehouseViewPermission(t *testing.T) {
 	warehouseID := int64(12)
 	actor := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsView, WarehouseID: &warehouseID}}}
 
-	entries, err := service.List(context.Background(), actor, warehouseID, "2026-10-04")
+	entries, err := service.List(context.Background(), actor, &warehouseID, todayDate())
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("expected one listed entry, got entries=%v err=%v", entries, err)
 	}
-	if _, err := service.List(context.Background(), actor, 13, "2026-10-04"); !errors.Is(err, ErrForbidden) {
+	otherWarehouseID := int64(13)
+	if _, err := service.List(context.Background(), actor, &otherWarehouseID, todayDate()); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden for another warehouse, got %v", err)
 	}
-	if _, err := service.List(context.Background(), actor, warehouseID, "2026-13-01"); !errors.Is(err, ErrInvalidInput) {
+	if _, err := service.List(context.Background(), actor, &warehouseID, "2026-13-01"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected invalid date error, got %v", err)
 	}
 }
@@ -120,7 +127,7 @@ func TestCreatePermissionDoesNotGrantReadOrSelectionOptions(t *testing.T) {
 	service := NewService(repository)
 	createOnly := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID}}}
 
-	if _, err := service.List(context.Background(), createOnly, warehouseID, "2026-10-04"); !errors.Is(err, ErrForbidden) {
+	if _, err := service.List(context.Background(), createOnly, &warehouseID, todayDate()); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected create-only actor to be denied reads, got %v", err)
 	}
 	if repository.listCalls != 0 {
@@ -129,6 +136,66 @@ func TestCreatePermissionDoesNotGrantReadOrSelectionOptions(t *testing.T) {
 	viewOnly := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsView, WarehouseID: &warehouseID}}}
 	if _, err := service.Options(context.Background(), viewOnly, &warehouseID); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected view-only actor to be denied create options, got %v", err)
+	}
+}
+
+func TestListAllWarehousesUsesOnlyViewableScope(t *testing.T) {
+	firstWarehouseID := int64(12)
+	secondWarehouseID := int64(14)
+	createOnlyWarehouseID := int64(18)
+	repository := &fakeRepository{entries: []Entry{{ID: 2}}}
+	service := NewService(repository)
+	manager := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{
+		{Permission: constants.PermissionOperationLogsView, WarehouseID: &firstWarehouseID},
+		{Permission: constants.PermissionOperationLogsView, WarehouseID: &secondWarehouseID},
+		{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &createOnlyWarehouseID},
+	}}
+
+	if _, err := service.List(context.Background(), manager, nil, todayDate()); err != nil {
+		t.Fatalf("List all returned error: %v", err)
+	}
+	sort.Slice(repository.lastListIDs, func(left, right int) bool { return repository.lastListIDs[left] < repository.lastListIDs[right] })
+	if !reflect.DeepEqual(repository.lastListIDs, []int64{firstWarehouseID, secondWarehouseID}) || repository.lastListWide {
+		t.Fatalf("all-warehouse list exceeded view permissions: ids=%v companyWide=%v", repository.lastListIDs, repository.lastListWide)
+	}
+
+	admin := rbac.Actor{CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsView}}}
+	if _, err := service.List(context.Background(), admin, nil, todayDate()); err != nil {
+		t.Fatalf("company-wide List all returned error: %v", err)
+	}
+	if !repository.lastListWide {
+		t.Fatal("expected company admin to list all company warehouses")
+	}
+}
+
+func TestOnlyDateOverridePermissionAllowsNonCurrentWorkDate(t *testing.T) {
+	warehouseID := int64(12)
+	nonCurrentDate := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	input := Input{WarehouseID: warehouseID, WorkDate: nonCurrentDate, ItemID: 21, StepID: 34, Quantity: 5, PerformedBy: 9}
+	repository := &fakeRepository{}
+	service := NewService(repository)
+	manager := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID}}}
+	if _, err := service.Create(context.Background(), manager, input); !errors.Is(err, ErrDateOverrideForbidden) {
+		t.Fatalf("expected manager date override to be denied, got %v", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatal("manager date override reached the repository")
+	}
+
+	admin := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{
+		{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID},
+		{Permission: constants.PermissionOperationLogsDateOverride},
+	}}
+	if _, err := service.Create(context.Background(), admin, input); err != nil {
+		t.Fatalf("admin date override returned error: %v", err)
+	}
+
+	superAdmin := rbac.Actor{UserID: 8, CompanyID: 3, Assignments: []rbac.Assignment{
+		{Permission: constants.PermissionOperationLogsCreate, WarehouseID: &warehouseID},
+		{Permission: constants.PermissionAdminsManage},
+	}}
+	if _, err := service.Create(context.Background(), superAdmin, input); err != nil {
+		t.Fatalf("super admin date override returned error: %v", err)
 	}
 }
 
