@@ -31,6 +31,7 @@ type StepOption struct {
 type ItemOption struct {
 	ID            int64        `json:"id"`
 	Name          string       `json:"name"`
+	CategoryName  string       `json:"category_name"`
 	UnitOfMeasure string       `json:"unit_of_measure"`
 	Steps         []StepOption `json:"steps"`
 }
@@ -54,6 +55,7 @@ type Entry struct {
 	WorkDate      string  `json:"work_date"`
 	ItemID        int64   `json:"item_id"`
 	ItemName      string  `json:"item_name"`
+	CategoryName  string  `json:"category_name"`
 	StepID        int64   `json:"step_id"`
 	StepTitle     string  `json:"step_title"`
 	UnitOfMeasure string  `json:"unit_of_measure"`

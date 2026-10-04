@@ -227,7 +227,7 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
                 <label>Work date<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required disabled={!canEditWorkDate} /></label>
                 <label>Item<select value={itemID} onChange={(event) => { setItemID(event.target.value); setStepID(''); }} required disabled={loadingOptions || items.length === 0}>
                   <option value="">Select an item</option>
-                  {items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.unit_of_measure}</option>)}
+                  {items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.category_name} · {item.unit_of_measure}</option>)}
                 </select></label>
                 <label>Step<select value={stepID} onChange={(event) => setStepID(event.target.value)} required disabled={!selectedItem || selectedItem.steps.length === 0}>
                   <option value="">Select a step</option>
@@ -252,10 +252,10 @@ export default function OperationsDashboard({ permissions }: { permissions: Perm
               </div>
               {loadingEntries ? <div className="directory-message">Loading entries...</div> : entries.length === 0 ? <div className="operation-log-empty">No work recorded for this date.</div> : (
                 <div className="operation-log-table-wrap"><table className="operation-log-table">
-                  <thead><tr>{filterWarehouseID === 'all' && <th>Warehouse</th>}<th>Item / step</th><th>Quantity</th><th>Performed by</th><th>Recorded</th><th>Actions</th></tr></thead>
+                  <thead><tr>{filterWarehouseID === 'all' && <th>Warehouse</th>}<th>Item / category / step</th><th>Quantity</th><th>Performed by</th><th>Recorded</th><th>Actions</th></tr></thead>
                   <tbody>{entries.map((entry) => <tr key={entry.id}>
                     {filterWarehouseID === 'all' && <td>{entry.warehouse_name}</td>}
-                    <td><strong>{entry.item_name}</strong><span>{entry.step_title}</span></td>
+                    <td className="operation-log-item-step"><strong>{entry.item_name}</strong><span>{entry.category_name} · {entry.step_title}</span></td>
                     <td className="operation-log-quantity">{entry.quantity.toLocaleString(undefined, { maximumFractionDigits: 12 })} {entry.unit_of_measure}</td>
                     <td>{entry.performer_name}</td>
                     <td>{new Date(entry.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</td>

@@ -679,10 +679,10 @@ button, input, select { font: inherit; }
 .operation-log-table th { padding: .7rem .65rem; color: #65756c; background: #f7f9f8; border-bottom: 1px solid #e5ebe7; font-size: .68rem; font-weight: 650; text-transform: uppercase; white-space: nowrap; }
 .operation-log-table td { padding: .8rem .65rem; border-bottom: 1px solid #edf0ee; color: #46564e; font-size: .83rem; }
 .operation-log-table tbody tr:last-child td { border-bottom: 0; }
-.operation-log-table td:first-child { min-width: 170px; }
-.operation-log-table td:first-child strong, .operation-log-table td:first-child span { display: block; }
-.operation-log-table td:first-child strong { color: #25372e; font-size: .86rem; font-weight: 650; }
-.operation-log-table td:first-child span { margin-top: .25rem; color: #68766f; font-size: .78rem; }
+.operation-log-table .operation-log-item-step { min-width: 220px; }
+.operation-log-table .operation-log-item-step strong, .operation-log-table .operation-log-item-step span { display: block; }
+.operation-log-table .operation-log-item-step strong { color: #25372e; font-size: .86rem; font-weight: 650; }
+.operation-log-table .operation-log-item-step span { margin-top: .25rem; color: #68766f; font-size: .78rem; }
 .operation-log-table .operation-log-quantity { color: #25583e; font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .operation-log-count { color: #6b7972; font-size: .78rem; white-space: nowrap; }
 .operation-log-empty { padding: 2.5rem 1rem; color: #6b7972; background: #f8faf8; border: 1px dashed #d3ddd7; border-radius: .45rem; text-align: center; font-size: .85rem; }
