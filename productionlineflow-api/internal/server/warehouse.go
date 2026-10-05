@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"productionlineflow-api/internal/constants"
 	"productionlineflow-api/internal/rbac"
 	"productionlineflow-api/internal/warehouse"
+
+	"github.com/gin-gonic/gin"
 )
 
 type WarehouseHandler struct{ service *warehouse.Service }
@@ -127,6 +128,8 @@ func (h *WarehouseHandler) error(c *gin.Context, err error) {
 		writeError(c, 400, "invalid_request", "Invalid warehouse request")
 	case errors.Is(err, warehouse.ErrNotFound):
 		writeError(c, 404, "warehouse_not_found", "Warehouse not found")
+	case errors.Is(err, warehouse.ErrConflict):
+		writeError(c, 409, "warehouse_in_use", "Warehouse is referenced by existing records and cannot be removed")
 	default:
 		logInternalError(c, "manage warehouse", err)
 		writeError(c, 500, "internal_error", "Unable to manage warehouse")

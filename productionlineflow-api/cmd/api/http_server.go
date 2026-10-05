@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"productionlineflow-api/internal/auth"
+	categoryModule "productionlineflow-api/internal/categories"
 	"productionlineflow-api/internal/company"
 	"productionlineflow-api/internal/config"
+	itemsModule "productionlineflow-api/internal/items"
+	operationsModule "productionlineflow-api/internal/operations"
 	"productionlineflow-api/internal/people"
 	"productionlineflow-api/internal/server"
 	warehouseModule "productionlineflow-api/internal/warehouse"
@@ -27,6 +30,8 @@ func startHTTPServer(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger
 	companyService := company.NewService(company.NewPostgresRepository(pool), minPasswordLength)
 	warehouseService := warehouseModule.NewService(warehouseModule.NewPostgresRepository(pool))
 	peopleService := people.NewService(people.NewPostgresRepository(pool), minPasswordLength)
+	itemRepository := itemsModule.NewPostgresRepository(pool)
+	operationLogRepository := operationsModule.NewPostgresRepository(pool)
 	router := server.NewRouter(cfg, &server.Dependencies{
 		Auth:               authService,
 		PlatformAuth:       platformAuthService,
@@ -36,6 +41,9 @@ func startHTTPServer(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger
 		Company:            companyService,
 		Warehouse:          warehouseService,
 		People:             peopleService,
+		Categories:         categoryModule.NewService(categoryModule.NewPostgresRepository(pool)),
+		Items:              itemsModule.NewService(itemRepository),
+		OperationLogs:      operationsModule.NewService(operationLogRepository),
 		SecureCookie:       cfg.Env == "prod",
 	})
 	httpServer := &http.Server{

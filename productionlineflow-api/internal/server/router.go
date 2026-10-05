@@ -108,6 +108,32 @@ func registerTenantRoutes(versioned *gin.RouterGroup, deps *Dependencies, authHa
 	})
 	registerWarehouseRoutes(secured, deps)
 	registerPeopleRoutes(secured, deps)
+	registerCategoryRoutes(secured, deps)
+	registerItemRoutes(secured, deps)
+	registerOperationLogRoutes(secured, deps)
+}
+
+func registerCategoryRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || deps.Categories == nil {
+		return
+	}
+	handler := NewCategoryHandler(deps.Categories)
+	secured.GET("/categories", handler.List)
+	secured.POST("/categories", handler.Create)
+	secured.PATCH("/categories/:id", handler.Update)
+	secured.DELETE("/categories/:id", handler.Delete)
+}
+
+func registerOperationLogRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || deps.OperationLogs == nil {
+		return
+	}
+	handler := NewOperationLogHandler(deps.OperationLogs)
+	secured.GET("/operation-logs/options", handler.Options)
+	secured.GET("/operation-logs/analysis", handler.Analyze)
+	secured.GET("/operation-logs", handler.List)
+	secured.POST("/operation-logs", handler.Create)
+	secured.PATCH("/operation-logs/:id", handler.Update)
 }
 
 func registerWarehouseRoutes(secured *gin.RouterGroup, deps *Dependencies) {
@@ -140,6 +166,18 @@ func registerPeopleRoutes(secured *gin.RouterGroup, deps *Dependencies) {
 		secured.PATCH("/roles/:id", peopleHandler.UpdateRole)
 		secured.DELETE("/roles/:id", peopleHandler.DeleteRole)
 	}
+}
+
+func registerItemRoutes(secured *gin.RouterGroup, deps *Dependencies) {
+	if deps == nil || deps.Items == nil {
+		return
+	}
+	handler := NewItemHandler(deps.Items)
+	secured.GET("/items", handler.List)
+	secured.POST("/items", handler.Create)
+	secured.GET("/items/:id", handler.Get)
+	secured.PATCH("/items/:id", handler.Update)
+	secured.DELETE("/items/:id", handler.Archive)
 }
 
 func registerAuthRoutes(root, versioned gin.IRoutes, prefix string, login, refresh, logout gin.HandlerFunc) {

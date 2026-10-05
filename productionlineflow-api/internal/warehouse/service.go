@@ -12,6 +12,7 @@ import (
 var ErrInvalidInput = errors.New("invalid warehouse input")
 var ErrNotFound = errors.New("warehouse not found")
 var ErrForbidden = errors.New("warehouse permission denied")
+var ErrConflict = errors.New("warehouse is referenced by existing records")
 
 type Warehouse struct {
 	ID        int64  `json:"id"`

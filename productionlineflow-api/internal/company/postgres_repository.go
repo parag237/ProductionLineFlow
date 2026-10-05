@@ -45,9 +45,9 @@ func (r *PostgresRepository) CreateCompany(ctx context.Context, input Input, pas
 		roleIDs[role.slug] = id
 	}
 	defaults := map[string][]string{
-		"super_admin": {"admins.manage", "roles.manage", "users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
-		"admin":       {"users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
-		"manager":     {"warehouse.members.manage", "warehouse.view", "workers.tasks.execute"},
+		"super_admin": {"admins.manage", "roles.manage", "users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute", "items.view", "items.manage", "items.categories.view", "items.categories.manage", "operations.logs.view", "operations.logs.create", "operations.logs.edit", "operations.logs.date_override"},
+		"admin":       {"users.create", "warehouse_types.manage", "warehouses.manage", "warehouse.members.manage", "warehouse.view", "workers.tasks.execute", "items.view", "items.manage", "items.categories.view", "items.categories.manage", "operations.logs.view", "operations.logs.create", "operations.logs.edit", "operations.logs.date_override"},
+		"manager":     {"warehouse.members.manage", "warehouse.view", "workers.tasks.execute", "operations.logs.view", "operations.logs.create", "operations.logs.edit"},
 		"worker":      {"warehouse.view", "workers.tasks.execute"},
 	}
 	for slug, permissions := range defaults {

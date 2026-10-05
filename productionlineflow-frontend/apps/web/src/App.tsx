@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { refreshTenantSession, request } from './api/client';
 import { clearRefreshToken, endIdleSession, isLoginRoute, redirectToLogin, setTenantAccessToken } from './api/session';
 import LoginView from './features/auth/LoginView';
+import CatalogDashboard from './features/items/CatalogDashboard';
+import OperationsDashboard from './features/operations/OperationsDashboard';
+import OperationsHub from './features/operations/OperationsHub';
 import PeopleDashboard from './features/people/PeopleDashboard';
 import PlatformApp from './features/platform/PlatformApp';
 import WarehouseDashboard from './features/warehouses/WarehouseDashboard';
@@ -17,6 +20,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showWarehouses, setShowWarehouses] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  const [showItems, setShowItems] = useState(false);
+  const [showOperations, setShowOperations] = useState(false);
+  const [operationsPage, setOperationsPage] = useState<'menu' | 'analysis' | 'workLog'>('menu');
 
   useEffect(() => {
     let active = true;
@@ -57,6 +63,18 @@ export default function App() {
     setPermissions({ company: [], warehouses: {} });
   }
 
+  function goBack() {
+    if (showOperations && operationsPage !== 'menu') {
+      setOperationsPage('menu');
+      return;
+    }
+    setShowWarehouses(false);
+    setShowPeople(false);
+    setShowItems(false);
+    setShowOperations(false);
+    setOperationsPage('menu');
+  }
+
   if (loading) {
     return <main className="loading-screen"><span className="loading-dot" />Restoring your session...</main>;
   }
@@ -64,7 +82,7 @@ export default function App() {
     return <LoginView onLogin={(session) => { setUser(session.user); setPermissions(normalizePermissions(session.permissions)); }} />;
   }
   return <>
-    <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople ? () => { setShowWarehouses(false); setShowPeople(false); } : undefined} />
-    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} />}
+    <CompanyHeader user={user} onLogout={logout} onBack={showWarehouses || showPeople || showItems || showOperations ? goBack : undefined} />
+    {showWarehouses ? <WarehouseDashboard canManage={permissions.company.includes('warehouses.manage')} /> : showPeople ? <PeopleDashboard user={user} permissions={permissions} onTransferred={logout} /> : showItems ? <CatalogDashboard permissions={permissions} /> : showOperations ? operationsPage === 'workLog' ? <OperationsDashboard permissions={permissions} /> : <OperationsHub page={operationsPage} permissions={permissions} onOpenAnalysis={() => setOperationsPage('analysis')} onOpenWorkLog={() => setOperationsPage('workLog')} /> : <Workspace user={user} permissions={permissions} onOpenWarehouses={() => setShowWarehouses(true)} onOpenPeople={() => setShowPeople(true)} onOpenItems={() => setShowItems(true)} onOpenOperations={() => { setOperationsPage('menu'); setShowOperations(true); }} />}
   </>;
 }

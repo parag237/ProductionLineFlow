@@ -1,0 +1,1 @@
+ALTER TABLE operation_work_logs DROP COLUMN category_name;

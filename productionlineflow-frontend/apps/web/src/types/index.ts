@@ -40,6 +40,25 @@ export type MeResponse = {
   permissions: Permissions;
 };
 export type Warehouse = { id: number; name: string; type_name: string; address?: string; state: string; created_at: string };
+export type Category = { id: number; name: string; created_at: string; updated_at: string };
+export type ItemStep = { id: number; position: number; title: string; instructions?: string };
+export type Item = { id: number; name: string; sku?: string; description?: string; unit_of_measure: string; category_id: number; category_name: string; is_active: boolean; created_at: string; updated_at: string; steps: ItemStep[] };
+export type OperationLogStepOption = { id: number; title: string };
+export type OperationLogItemOption = { id: number; name: string; category_name: string; unit_of_measure: string; steps: OperationLogStepOption[] };
+export type OperationLogWarehouseOption = { id: number; name: string };
+export type OperationLogPerformerOption = { id: number; name: string };
+export type OperationLogOptions = { warehouses: OperationLogWarehouseOption[]; items: OperationLogItemOption[]; performers: OperationLogPerformerOption[]; today: string };
+export type OperationLogEntry = { id: number; warehouse_id: number; warehouse_name: string; work_date: string; item_id: number; item_name: string; category_name: string; step_id: number; step_title: string; unit_of_measure: string; quantity: number; performed_by: number; performer_name: string; recorded_by: number; created_at: string };
+export type OperationLogAnalysis = {
+  summary: { entry_count: number; item_count: number; step_count: number; performer_count: number };
+  units: { unit_of_measure: string; quantity: number }[];
+  daily: { work_date: string; unit_of_measure: string; entry_count: number; quantity: number }[];
+  categories: { category_name: string; unit_of_measure: string; entry_count: number; quantity: number }[];
+  items: { item_id: number; item_name: string; category_name: string; unit_of_measure: string; entry_count: number; quantity: number }[];
+  steps: { item_name: string; step_title: string; unit_of_measure: string; entry_count: number; quantity: number }[];
+  performers: { performer_id: number; performer_name: string; unit_of_measure: string; entry_count: number; quantity: number }[];
+};
+export type ItemStepInput = { title: string; instructions: string };
 export type Person = { id: number; name: string; email: string; is_active: boolean; assignments: Assignment[] };
 export type Assignment = { id: number; role_id: number; role_slug: string; role_name: string; role_scope: string; warehouse_id: number | null; warehouse_name?: string };
 export type Role = { id: number; slug: string; name: string; scope: string; is_system: boolean; permissions: string[] };
